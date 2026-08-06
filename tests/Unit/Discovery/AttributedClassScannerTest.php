@@ -3,6 +3,7 @@
 use Rushing\Popcorn\Discovery\AttributedClassScanner;
 use Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\Classes\Annotated;
 use Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\Classes\Plain;
+use Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\Classes\ProseWithClassSubstring;
 use Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\Classes\SubAnnotated;
 use Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\ScanMarker;
 use Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\ScanSubMarker;
@@ -40,4 +41,16 @@ it('derives a class-string from a file', function () use ($path) {
     $class = (new AttributedClassScanner)->classNameFromFile($path.'/Annotated.php');
 
     expect($class)->toBe(Annotated::class);
+});
+
+it('is not fooled by "class" appearing inside prose or a ::class fetch before the real declaration', function () use ($path) {
+    $class = (new AttributedClassScanner)->classNameFromFile($path.'/ProseWithClassSubstring.php');
+
+    expect($class)->toBe(ProseWithClassSubstring::class);
+});
+
+it('finds a class whose docblock/const contain false-positive "class" substrings when scanning', function () use ($path) {
+    $found = (new AttributedClassScanner)->scan([$path], ScanMarker::class);
+
+    expect($found)->toContain(ProseWithClassSubstring::class);
 });

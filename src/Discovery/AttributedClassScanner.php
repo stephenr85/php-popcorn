@@ -87,6 +87,12 @@ class AttributedClassScanner
      * Derive a class-string from a PHP file's `namespace` + type declaration. Matches
      * class/enum/interface/trait so a scanned directory of mixed declarations resolves.
      *
+     * Tokenizes rather than regex-matches: a naive `class\s+(\w+)` regex false-matches prose like
+     * "a first-class Capability" inside a docblock, or a `Foo::class` reference, as if it were the
+     * declaration itself. PHP's own lexer can't be fooled by either — it only ever emits `T_CLASS`
+     * for a real class keyword, comments are their own token type, and a `::class` fetch is
+     * distinguished by the preceding `::`.
+     *
      * @return class-string|null
      */
     public function classNameFromFile(string $path): ?string
@@ -97,13 +103,87 @@ class AttributedClassScanner
             return null;
         }
 
-        $namespace = preg_match('/namespace\s+([^;]+);/', $contents, $ns) ? trim($ns[1]) : '';
+        $tokens = token_get_all($contents);
+        $namespace = '';
 
-        if (! preg_match('/\b(?:class|enum|interface|trait)\s+(\w+)/', $contents, $type)) {
-            return null;
+        foreach ($tokens as $i => $token) {
+            if (! is_array($token)) {
+                continue;
+            }
+
+            [$id] = $token;
+
+            if ($id === T_NAMESPACE) {
+                $namespace = self::readName($tokens, $i + 1);
+
+                continue;
+            }
+
+            if (in_array($id, [T_CLASS, T_ENUM, T_INTERFACE, T_TRAIT], true) && ! self::precededByDoubleColon($tokens, $i)) {
+                $name = self::nextIdentifier($tokens, $i + 1);
+
+                if ($name === null) {
+                    // `new class { ... }` — an anonymous class carries no declared name to derive.
+                    continue;
+                }
+
+                /** @var class-string */
+                return $namespace === '' ? $name : $namespace.'\\'.$name;
+            }
         }
 
-        /** @var class-string */
-        return $namespace === '' ? $type[1] : $namespace.'\\'.$type[1];
+        return null;
+    }
+
+    /** Whether the token at $index is a `::class` fetch rather than a real type keyword. */
+    private static function precededByDoubleColon(array $tokens, int $index): bool
+    {
+        for ($j = $index - 1; $j >= 0; $j--) {
+            $token = $tokens[$j];
+
+            if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+
+            return $token === '::';
+        }
+
+        return false;
+    }
+
+    /** The next real identifier after $index, skipping whitespace/comments — or null (e.g. anonymous class). */
+    private static function nextIdentifier(array $tokens, int $index): ?string
+    {
+        for ($j = $index; $j < count($tokens); $j++) {
+            $token = $tokens[$j];
+
+            if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+
+            return is_array($token) && $token[0] === T_STRING ? $token[1] : null;
+        }
+
+        return null;
+    }
+
+    /** Read a (possibly qualified) name starting at $index, up to the terminating `;` or `{`. */
+    private static function readName(array $tokens, int $index): string
+    {
+        $name = '';
+
+        for ($j = $index; $j < count($tokens); $j++) {
+            $token = $tokens[$j];
+
+            if ($token === ';' || $token === '{') {
+                break;
+            }
+
+            if (is_array($token) && in_array($token[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NS_SEPARATOR], true)) {
+                $name .= $token[1];
+            }
+        }
+
+        return $name;
     }
 }
