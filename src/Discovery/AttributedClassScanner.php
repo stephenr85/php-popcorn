@@ -13,7 +13,7 @@ use Symfony\Component\Finder\Finder;
  * `namespace` + `class`/`enum`/`interface`/`trait` declaration, loads it, and keeps only the
  * class-strings that CARRY the requested attribute. It knows nothing about resources, realms,
  * or any consumer's vocabulary — callers pass the attribute class they care about
- * (`#[AdminResource]`, `#[Realm]`, …) and get back the matching `class-string[]`.
+ * (`#[ParticleResource]`, `#[Realm]`, …) and get back the matching `class-string[]`.
  *
  * Extracted from `Splicewire\Beam\Frame\AdminResourceRegistry::scanPaths()` /
  * `classNameFromFile()` (they were duplicated verbatim in beam's `RealmDiscovery`); this is the
