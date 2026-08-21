@@ -1,0 +1,52 @@
+{
+  "$comment": "Conformance corpus for the RegistryKey grammar (registry-kernel ticket 05). Data, not PHP, so the TS port (ticket 16) and the enum codegen (ticket 12) assert against the SAME cases rather than a re-reading of the prose. Every entry here is executable: tests/Unit/Registries/KeyTest.php drives all three sections. Longest-prefix ROUTING cases are deliberately absent — the index does not exist yet; ticket 21 adds a fourth section when it lands.",
+
+  "grammar": [
+    { "input": "beam", "segments": ["beam"], "why": "single segment is a legal key" },
+    { "input": "beam.realm", "segments": ["beam", "realm"] },
+    { "input": "beam.realm.overlays", "segments": ["beam", "realm", "overlays"] },
+    { "input": "beam.realm-overlays", "segments": ["beam", "realm-overlays"], "why": "kebab inside a segment; the estate's resource-key convention is plural-kebab" },
+    { "input": "market-extensions", "segments": ["market-extensions"], "why": "a live resource key, post api-surface-coherence ticket 16" },
+    { "input": "otio.validate", "segments": ["otio", "validate"], "why": "a live invocable name in this package's own tests" },
+    { "input": "v1.beam.realm", "segments": ["v1", "beam", "realm"], "why": "digits are legal within a segment" },
+    { "input": "a1-b2.c3", "segments": ["a1-b2", "c3"] },
+
+    { "input": "", "segments": null, "why": "empty string is not a key" },
+    { "input": "Foo.Bar", "segments": null, "why": "uppercase is REJECTED, never folded — the whole case-sensitivity decision in one line" },
+    { "input": "beamRealm", "segments": null, "why": "camelCase is a class name, not a key; use Key::fromClass() deliberately" },
+    { "input": "beam:realm", "segments": null, "why": "`:` means artisan command namespacing (splicewire:beam:doctor) and type-tagged identity (fact:secret) live in this estate — it is not an alternate dot" },
+    { "input": "splicewire/laravel-beam", "segments": null, "why": "`/` means a composer coordinate, and a MIME type; not a key separator" },
+    { "input": "beam..realm", "segments": null, "why": "empty segment" },
+    { "input": ".beam", "segments": null, "why": "leading separator" },
+    { "input": "beam.", "segments": null, "why": "trailing separator" },
+    { "input": " beam.realm", "segments": null, "why": "no trimming — whitespace in a source literal is a typo and must fail loudly" },
+    { "input": "beam.realm ", "segments": null, "why": "same, trailing" },
+    { "input": "beam.realm\n", "segments": null, "why": "the `$`-vs-`\\z` regex trap: a trailing newline prints identically to a legal key" },
+    { "input": "beam_realm", "segments": null, "why": "snake — api-surface-coherence ticket 16 spent real effort removing snake keys from the estate" },
+    { "input": "-beam", "segments": null, "why": "leading hyphen" },
+    { "input": "beam-", "segments": null, "why": "trailing hyphen" },
+    { "input": "beam--realm", "segments": null, "why": "doubled hyphen" },
+    { "input": "İstanbul", "segments": null, "why": "REGRESSION PIN: unreachable under the charset, and that is the point — this case fails loudly the day anyone adds case folding to either runtime. PHP strtolower() and JS toLowerCase() disagree on the Turkish dotted I." },
+    { "input": "beam.realm.ünicode", "segments": null, "why": "non-ASCII is out, so the two runtimes have no locale to disagree about" }
+  ],
+
+  "equality": [
+    { "a": "beam.realm", "b": "beam.realm", "equal": true },
+    { "a": "beam.realm", "b": "beam.realms", "equal": false, "why": "one character of difference in the last segment is a different key" },
+    { "a": "beam.realm", "b": "beam", "equal": false },
+    { "a": "beam.realm-overlays", "b": "beam.realm.overlays", "equal": false, "why": "NOT the same key — though EnumWriter::caseName() currently emits BeamRealmOverlays for both, which is ticket 12's collision to solve, not the grammar's" }
+  ],
+
+  "hierarchy": [
+    { "key": "beam.realm.overlays", "parent": "beam.realm" },
+    { "key": "beam.realm", "parent": "beam" },
+    { "key": "beam", "parent": null },
+
+    { "key": "beam.realm.overlays", "under": "beam.realm", "isUnder": true },
+    { "key": "beam.realm.overlays", "under": "beam", "isUnder": true },
+    { "key": "beam.realm", "under": "beam.realm", "isUnder": false, "why": "strictly below; a key is not under itself" },
+    { "key": "beam.realm", "under": "beam.realm.overlays", "isUnder": false },
+    { "key": "beam.realms", "under": "beam.realm", "isUnder": false, "why": "THE case this exists for: prefix is segment-wise, never character-wise" },
+    { "key": "beam.realms.x", "under": "beam.realm", "isUnder": false, "why": "same trap one level deeper" }
+  ]
+}
