@@ -99,6 +99,25 @@ class Key implements RegistryKey
         return static::parse(implode(static::SEPARATOR, $segments));
     }
 
+    /**
+     * The zero-segment key: the root of the whole tree, rendering as the empty string.
+     *
+     * Deliberately NOT reachable through {@see parse()} — `parse('')` still throws, because an empty
+     * string arriving from config or a request is a bug, not an address, and a parser that answered
+     * "the root of everything" to it would be the loudest possible silent failure. This is the
+     * explicit, opt-in constructor, exactly as {@see fromClass()} is for class-derived keys.
+     *
+     * It exists because {@see RegistryIndex} needs it: the index is the one registry whose keyspace is
+     * the WHOLE keyspace rather than a branch of it, so its declared root is this. That is what lets
+     * the index conform to its own contract instead of carrying an exemption from it — every other
+     * registry stamps its root onto incoming keys, and stamping a zero-segment root is a no-op, so the
+     * rule holds for the index without being special-cased for it (registry-kernel ticket 20).
+     */
+    public static function root(): self
+    {
+        return new self([]);
+    }
+
     /** @return list<string> */
     public function segments(): array
     {

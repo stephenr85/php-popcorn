@@ -85,9 +85,16 @@ class IsRegistry
         return $attributes === [] ? null : $attributes[0]->newInstance();
     }
 
-    /** The declared root as a parsed key. Throws {@see Exceptions\InvalidRegistryKey} if it is not one. */
+    /**
+     * The declared root as a parsed key. Throws {@see Exceptions\InvalidRegistryKey} if it is not one.
+     *
+     * The empty string is the one legal non-key here, and it means the ROOT of the whole tree — see
+     * {@see Key::root()}. Only {@see RegistryIndex} declares it, because only the index owns the whole
+     * keyspace rather than a branch of it. It is spelled out here rather than in `Key::parse()` so
+     * that an empty string arriving from anywhere ELSE still throws (ticket 20).
+     */
     public function rootKey(): RegistryKey
     {
-        return Key::parse($this->root);
+        return $this->root === '' ? Key::root() : Key::parse($this->root);
     }
 }

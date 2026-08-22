@@ -65,8 +65,28 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  *
  * So: the kernel COMPARES and JOINS segments and never parses one. `(string) $key` survives only where
  * a human reads it — exception messages and displays — which is what a rendering is for.
+ *
+ * ## Relative in, absolute out
+ *
+ * Every method's key argument passes through {@see door()}, which stamps the declared root onto a key
+ * that is not already under it. So a call site writes `register('invoices', …)` and the entry is stored,
+ * enumerated and addressed as `beam.particle.resources.invoices` (registry-kernel ticket 20).
+ *
+ * Two properties come out of that, and both are the reason for it:
+ *
+ * - **The root is enforced by construction rather than by a check.** You cannot register outside your
+ *   own root because you never spell the root — there is no out-of-root case to validate, and none to
+ *   miss. The corollary is that a key which merely LOOKS absolute but sits under someone else's root is
+ *   read as relative and stamped; there is no way to distinguish that from a typo, and inventing one
+ *   would put a parser back in the registry.
+ * - **A rekey is a one-line attribute change.** Moving a registry's root moves every key it owns,
+ *   without touching a single registration site.
+ *
+ * `keys()`, `matches()`, `children()` and `descendants()` therefore hand back ABSOLUTE keys — which is
+ * what makes enumerate-then-resolve round-trip through {@see RegistryIndex}, where a relative key would
+ * mean nothing without also knowing which registry it came from.
  */
-class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registry
+class BasicRegistry implements Forgettable, Gated, Nested, RecordsSupersession, Registry
 {
     /**
      * Segments joined for use as a PHP array key. NUL is the separator because segments are opaque —
@@ -123,6 +143,41 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
     }
 
     /**
+     * Every key argument's one entrance: coerce the union, then stamp the declared root onto a key that
+     * is not already under it.
+     *
+     * The rule is deliberately two-sided rather than a heuristic: a key **under or equal to** the root
+     * is already absolute and passes through untouched; anything else is relative and gets the root
+     * joined onto its front. Equality counts as absolute because that is the reading the index would
+     * have sent — a registry rooted at `beam.realm` asked for `beam.realm` is being asked about its own
+     * branch, not about a child called `beam.realm`.
+     *
+     * Two cases pass through unstamped, and neither is an exception to the rule:
+     *
+     * - **A zero-segment root** — {@see RegistryIndex}'s. Everything is under the root of the tree, so
+     *   the general rule already returns the key untouched; there is no special case here to find.
+     * - **A foreign {@see RegistryKey}.** Stamping means constructing a key of the same type with extra
+     *   segments on the front, and the kernel cannot construct a consumer's key type — `schemastud/
+     *   laravel-json-ns` keys by namespace URI, where URI-is-identity is the package's whole thesis, and
+     *   a URI's `:` and `/` would fail {@see Key::SEGMENT_PATTERN} on the way to a `Key` anyway. So a
+     *   foreign-keyed registry is relative-forever and its entries are NOT addressable through the
+     *   global keyspace — reachable only as a registry, through the index, never through `pop()`. That
+     *   is the same line ticket 13 drew when `ExistsInRegistry` hard-refuses a foreign-keyed registry,
+     *   arrived at from the other end.
+     */
+    private function door(RegistryKey|string $key): RegistryKey
+    {
+        $key = Key::of($key);
+        $root = $this->declaration->rootKey();
+
+        if (! $key instanceof Key || $key->equals($root) || $key->isUnder($root)) {
+            return $key;
+        }
+
+        return Key::fromSegments([...$root->segments(), ...$key->segments()]);
+    }
+
+    /**
      * Install the host's authorizer.
      *
      * Present so the index can push one authorizer down into the registries it composes — per ticket 09
@@ -138,7 +193,7 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
 
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static
     {
-        $key = Key::of($key);
+        $key = $this->door($key);
 
         if ($this->declaration->onDuplicate !== OnDuplicate::Admit) {
             $occupant = $this->recordAt($key);
@@ -166,12 +221,12 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
 
     public function has(RegistryKey|string $key): bool
     {
-        return $this->visibleAt(Key::of($key)) !== [];
+        return $this->visibleAt($this->door($key)) !== [];
     }
 
     public function resolve(RegistryKey|string $key): mixed
     {
-        $key = Key::of($key);
+        $key = $this->door($key);
 
         if ($this->entries === [] && $this->declaration->optionality === Optionality::Required) {
             throw RegistryMiss::unpopulated((string) $key, $this->declaration->root);
@@ -220,7 +275,7 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
 
     public function matches(RegistryKey|string $key): array
     {
-        $key = Key::of($key);
+        $key = $this->door($key);
 
         $matched = $this->visible(array_merge($this->recordsAt($key), $this->recordsUnder($key)));
 
@@ -250,7 +305,7 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
 
     public function forget(RegistryKey|string $key): static
     {
-        $segments = Key::of($key)->segments();
+        $segments = $this->door($key)->segments();
 
         $this->entries = array_values(array_filter(
             $this->entries,
@@ -288,12 +343,12 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
 
     public function superseded(RegistryKey|string $key): array
     {
-        return $this->superseded[$this->identity(Key::of($key)->segments())] ?? [];
+        return $this->superseded[$this->identity($this->door($key)->segments())] ?? [];
     }
 
     public function children(RegistryKey|string $key): array
     {
-        $key = Key::of($key);
+        $key = $this->door($key);
         $depth = count($key->segments()) + 1;
 
         return $this->branchKeys($key, fn (array $below) => count($below) === $depth);
@@ -301,7 +356,7 @@ class BasicRegistry implements Forgettable, Nested, RecordsSupersession, Registr
 
     public function descendants(RegistryKey|string $key): array
     {
-        return $this->branchKeys(Key::of($key), fn (array $below) => true);
+        return $this->branchKeys($this->door($key), fn (array $below) => true);
     }
 
     /**

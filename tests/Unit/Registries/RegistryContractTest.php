@@ -39,6 +39,16 @@ function registry(
     ));
 }
 
+/** A store rooted somewhere other than `beam.resources`, for the segment-wise near-miss cases. */
+function rootedAt(string $root): BasicRegistry
+{
+    return new BasicRegistry(new IsRegistry(
+        root: $root,
+        of: 'test entries',
+        arity: RegistryArity::PickOne,
+    ));
+}
+
 it('keeps attach, forget and the tree walks OFF the base interface', function () {
     $methods = array_map(
         fn (ReflectionMethod $m) => $m->getName(),
@@ -150,7 +160,10 @@ it('never walks UP a key: resolution is flat even though the keyspace is a tree'
 });
 
 it('guarantees matches() in registration order, and matches at-or-under segment-wise', function () {
-    $store = registry()
+    // Rooted at `beam` rather than `beam.resources` so `beam.realms.article` can be registered at all:
+    // since ticket 20, a key outside the declared root is read as RELATIVE and stamped, so the
+    // near-miss sibling has to live inside the root to be a near-miss rather than a new subtree.
+    $store = rootedAt('beam')
         ->register('beam.resources.order', 'order')
         ->register('beam.realms.article', 'not this one')
         ->register('beam.resources', 'branch')
@@ -196,7 +209,7 @@ it('forgets by registrant, unscoped — provenance selects, it does not authoriz
 });
 
 it('walks the tree by segments, never by characters', function () {
-    $store = registry()
+    $store = rootedAt('beam')
         ->register('beam.resources.order', 'order')
         ->register('beam.resources.invoice.line', 'line')
         ->register('beam.realms.article', 'article');
