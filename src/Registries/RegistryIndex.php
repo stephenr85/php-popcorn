@@ -55,7 +55,7 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
         .'duplicate is refused at describe time rather than recorded as a supersession.',
     order: 0,
 )]
-class RegistryIndex implements Gated, Nested, Registry
+class RegistryIndex implements Forgettable, Gated, Nested, Registry
 {
     private BasicRegistry $registries;
 
@@ -84,10 +84,17 @@ class RegistryIndex implements Gated, Nested, Registry
      * precisely because it would make method-for-method delegation mandatory and quietly withdraw that
      * sanction.
      *
+     * `$by` names the REGISTRANT, and it defaults to the owner's (or store's) class — which is what a
+     * package describing its own registry wants. A caller describing on a narrower scale passes its own
+     * selector instead, so {@see forgetBy()} can unwind that scale in one call: the live shape is a
+     * tenant or conduit id, where `describe(…, by: $tenantId)` and `forgetBy($tenantId)` bracket a
+     * hydration. Provenance is a selector for finding and explaining, never an authorization — nothing
+     * here checks that the caller is the registrant (ticket 08 D8, ticket 41 D8).
+     *
      * @throws InvalidArgumentException the store can say what root it owns
      * @throws Exceptions\DuplicateRegistryKey another registry already claims that root
      */
-    public function describe(Registry $store, ?object $owner = null): static
+    public function describe(Registry $store, ?object $owner = null, ?string $by = null): static
     {
         $declaration = $this->declarationOf($store, $owner);
         $root = $declaration->rootKey();
@@ -95,7 +102,7 @@ class RegistryIndex implements Gated, Nested, Registry
         $this->registries->register(
             $root,
             $store,
-            by: $owner === null ? $store::class : $owner::class,
+            by: $by ?? ($owner === null ? $store::class : $owner::class),
         );
 
         if ($owner !== null) {
@@ -224,6 +231,80 @@ class RegistryIndex implements Gated, Nested, Registry
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static
     {
         $this->registries->register($key, $entry, $by, $ability);
+
+        return $this;
+    }
+
+    /**
+     * Take a registry back out of the index, by the root it declared.
+     *
+     * ## Why an index needs this at all, when a registry is described once at boot
+     *
+     * The index is bound `singleton()` while the front door is `scoped()`, and tenant switches happen
+     * MID-REQUEST — tower's `ConduitHydrator` runs on every switch. So the standing rule is that a
+     * registry is described once and what varies per tenant is its ENTRIES (ticket 41 D7), which leaves
+     * this a SAFETY mechanism rather than a load-bearing one: nothing on the happy path calls it.
+     *
+     * It exists because the failure mode without it is silent in one direction and loud in the other. A
+     * runtime-rooted registry described per tenant would either leak across tenants or throw
+     * {@see Exceptions\DuplicateRegistryKey} on the next hydration, and a caller that has decided to take
+     * that route needs a way back out. Whether that route is ever sanctioned is ticket 26's.
+     *
+     * The owner record goes with it, because {@see owner()} falling back to a store that is no longer
+     * described would answer for a registry the index has forgotten.
+     */
+    public function forget(RegistryKey|string $key): static
+    {
+        $key = Key::of($key);
+
+        if ($key->equals(Key::root())) {
+            throw new InvalidArgumentException(
+                'The index cannot forget itself: it describes itself at construction and declares '
+                    .'Optionality::Required, so a self-hosting root that could be removed would make the '
+                    .'contract aspirational in exactly the one place the package can least afford it.'
+            );
+        }
+
+        $this->registries->forget($key);
+
+        unset($this->owners[(string) $key]);
+
+        return $this;
+    }
+
+    /**
+     * Take out every registry described BY `$registrant` — the shape a tenant unwind wants.
+     *
+     * Paired with `describe(…, by: $selector)`: the registrant defaults to the owner's class, which makes
+     * this provider-scale, but a caller that passed its own selector unwinds exactly that scale in one
+     * call rather than remembering which roots it described.
+     *
+     * Unscoped, like {@see forget()} — provenance selects, it does not authorize.
+     *
+     * The owner records are pruned by DIFFERENCE rather than by asking each root who registered it,
+     * because the registrant is a private field of the inner store and reading it back would mean growing
+     * {@see BasicRegistry}'s public surface for one caller's bookkeeping.
+     *
+     * **The self-hosting entry is never a candidate.** The index describes itself under its own class
+     * name, so a bulk unwind naming that class would otherwise un-host it — see {@see forget()}, which
+     * refuses the same removal outright. A bulk selector is not the place for that refusal, so the entry
+     * is restored instead of the whole call failing.
+     */
+    public function forgetBy(string $registrant): static
+    {
+        $before = array_map('strval', $this->registries->unfiltered()->keys());
+
+        $this->registries->forgetBy($registrant);
+
+        $after = array_map('strval', $this->registries->unfiltered()->keys());
+
+        foreach (array_diff($before, $after) as $gone) {
+            unset($this->owners[$gone]);
+        }
+
+        if ($this->registries->tryResolve(Key::root()) === null) {
+            $this->describe($this, $this);
+        }
 
         return $this;
     }

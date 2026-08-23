@@ -251,3 +251,75 @@ it('declares the capability on the type, so a registry that cannot receive one s
     expect(store('beam.resources'))->toBeInstanceOf(Gated::class)
         ->and(new RegistryIndex)->toBeInstanceOf(Gated::class);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Forgettable (registry-kernel ticket 41 D8)
+//
+// The index is bound singleton() while the front door is scoped(), and tenant switches happen
+// mid-request — so the standing rule is that a registry is described once and its ENTRIES vary
+// per tenant (41 D7). These assert the safety valve for the route that does not follow it, and
+// the one removal that must never succeed.
+// ---------------------------------------------------------------------------------------------
+
+it('forgets a described registry by its root, and the owner record goes with it', function () {
+    $index = new RegistryIndex;
+    $owner = new stdClass;
+
+    $index->describe(store('tenant.scratch'), $owner);
+
+    expect($index->owner('tenant.scratch'))->toBe($owner)
+        ->and($index->routeTo('tenant.scratch.thing'))->not->toBeNull();
+
+    $index->forget('tenant.scratch');
+
+    expect($index->owner('tenant.scratch'))->toBeNull()
+        ->and($index->routeTo('tenant.scratch.thing'))->toBeNull();
+});
+
+it('lets a forgotten root be described again, which is the whole point of the teardown', function () {
+    $index = new RegistryIndex;
+
+    $index->describe(store('tenant.scratch'));
+    $index->forget('tenant.scratch');
+
+    expect(fn () => $index->describe(store('tenant.scratch')))->not->toThrow(DuplicateRegistryKey::class);
+});
+
+it('refuses to forget its own zero-segment root', function () {
+    $index = new RegistryIndex;
+
+    expect(fn () => $index->forget(Key::root()))->toThrow(InvalidArgumentException::class);
+    expect($index->resolve(Key::root()))->toBe($index);
+});
+
+it('unwinds every registry described under one registrant selector', function () {
+    $index = new RegistryIndex;
+
+    $index->describe(store('tenant.one'), by: 'tenant:42');
+    $index->describe(store('tenant.two'), by: 'tenant:42');
+    $index->describe(store('shared.thing'), by: 'tenant:99');
+
+    $index->forgetBy('tenant:42');
+
+    expect($index->routeTo('tenant.one.x'))->toBeNull()
+        ->and($index->routeTo('tenant.two.x'))->toBeNull()
+        ->and($index->routeTo('shared.thing.x'))->not->toBeNull();
+});
+
+it('defaults the registrant to the owner class, so a package unwind stays provider-scale', function () {
+    $index = new RegistryIndex;
+    $owner = new stdClass;
+
+    $index->describe(store('pkg.thing'), $owner);
+    $index->forgetBy(stdClass::class);
+
+    expect($index->routeTo('pkg.thing.x'))->toBeNull();
+});
+
+it('survives a bulk unwind naming its own class, rather than un-hosting itself', function () {
+    $index = new RegistryIndex;
+
+    $index->forgetBy(RegistryIndex::class);
+
+    expect($index->resolve(Key::root()))->toBe($index);
+});
