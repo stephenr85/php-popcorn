@@ -11,6 +11,7 @@ use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\HasRegistryKey;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
+use Rushing\Popcorn\Registries\Nested;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
 use Rushing\Popcorn\Registries\Registry;
@@ -65,7 +66,7 @@ use Rushing\Popcorn\Registries\RegistryKey;
         .'`voice.convert` and two music renderers under `music.render`, and the last provider registered '
         .'is the one that answers.',
 )]
-class InvocableRegistry implements Forgettable, Gated, Registry
+class InvocableRegistry implements Forgettable, Gated, Nested, Registry
 {
     private BasicRegistry $entries;
 
@@ -117,6 +118,26 @@ class InvocableRegistry implements Forgettable, Gated, Registry
     public function keys(): array
     {
         return $this->entries->keys();
+    }
+
+    /**
+     * The keyspace read as a tree — {@see Nested}, forwarded to the store that already implements it.
+     *
+     * Capability names have ALWAYS been dotted families (`grounding.source.<type>`,
+     * `screening.source.<type>`, `music.render.sampler`), and consumers enumerated them by
+     * `str_starts_with()` over `names()` because there was nothing else to reach for. That is a
+     * character-wise test standing in for a segment-wise one: `screening.sources` passes a
+     * `screening.source` prefix check, and once every owner has its own root the check is also
+     * scanning a keyspace the consumer does not own. Both walks here are segment-wise.
+     */
+    public function children(RegistryKey|string $key): array
+    {
+        return $this->entries->children($key);
+    }
+
+    public function descendants(RegistryKey|string $key): array
+    {
+        return $this->entries->descendants($key);
     }
 
     public function unfiltered(): Registry

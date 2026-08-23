@@ -160,3 +160,27 @@ it('filters every read through an installed authorizer, has() included', functio
         ->and($registry->has('gated'))->toBeFalse()
         ->and($registry->unfiltered()->has('gated'))->toBeTrue();
 });
+
+it('reads its capability families as a TREE, segment-wise and not by string prefix', function () {
+    $registry = new InvocableRegistry;
+
+    $registry->register(new LocalInvocable('screening.source.denylist', fn (array $i): array => []));
+    $registry->register(new LocalInvocable('screening.source.gazetteer', fn (array $i): array => []));
+
+    // The trap the estate's `str_starts_with($name, 'screening.source.')` scans could not see:
+    // `screening.sources` passes that check character-wise and is not a child of `screening.source`
+    // at all. Nested's walk is segment-wise, so it never picks this up.
+    $registry->register(new LocalInvocable('screening.sources', fn (array $i): array => []));
+
+    expect(array_map('strval', $registry->children('screening.source')))
+        ->toBe([
+            'popcorn.invocables.screening.source.denylist',
+            'popcorn.invocables.screening.source.gazetteer',
+        ]);
+
+    // ...and a child is one segment down, where a descendant is any depth.
+    $registry->register(new LocalInvocable('screening.source.denylist.strict', fn (array $i): array => []));
+
+    expect($registry->children('screening.source'))->toHaveCount(2)
+        ->and($registry->descendants('screening.source'))->toHaveCount(3);
+});
