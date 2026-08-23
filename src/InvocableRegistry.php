@@ -201,16 +201,7 @@ class InvocableRegistry implements Forgettable, Gated, Nested, Registry
      */
     public function names(): array
     {
-        $root = $this->entries->declaration()->rootKey()->segments();
-        $depth = count($root);
-
-        return array_map(function (RegistryKey $key) use ($root, $depth): string {
-            $segments = $key->segments();
-
-            return array_slice($segments, 0, $depth) === $root
-                ? implode('.', array_slice($segments, $depth))
-                : (string) $key;
-        }, $this->keys());
+        return $this->entries->relativeKeys();
     }
 
     /**

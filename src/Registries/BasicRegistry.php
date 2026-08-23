@@ -384,6 +384,34 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
     }
 
     /**
+     * {@see keys()} with the declared root stripped back off — keys as the CALLER spelled them.
+     *
+     * The inverse of {@see door()}, and it lives here for the same reason door() does: "relative in,
+     * absolute out" (ticket 20 D2) is a kernel rule, so the un-stamping belongs beside the stamping
+     * rather than being re-derived by every owner that wants to show a caller its own vocabulary.
+     * `InvocableRegistry::names()` and `GeneratorRegistry::stacks()` had grown byte-identical copies.
+     *
+     * A foreign {@see RegistryKey} is never stamped, so it comes back WHOLE, rendered by its owner.
+     * That is why this is a segment-array comparison and not a string prefix strip — the case a green
+     * suite against `Key` cannot see (ticket 23's amendment).
+     *
+     * @return list<string>
+     */
+    public function relativeKeys(): array
+    {
+        $root = $this->declaration->rootKey()->segments();
+        $depth = count($root);
+
+        return array_map(function (RegistryKey $key) use ($root, $depth): string {
+            $segments = $key->segments();
+
+            return array_slice($segments, 0, $depth) === $root
+                ? implode('.', array_slice($segments, $depth))
+                : (string) $key;
+        }, $this->keys());
+    }
+
+    /**
      * The keys of every visible entry strictly under `$key`, truncated to whatever `$keep` accepts and
      * de-duplicated in registration order. A branch key is reported even when nothing is registered at
      * the branch itself — `a.b.c` makes `a.b` a child of `a`.
