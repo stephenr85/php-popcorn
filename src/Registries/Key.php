@@ -5,7 +5,7 @@ namespace Rushing\Popcorn\Registries;
 use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 
 /**
- * The canonical {@see RegistryKey}: dot-separated lowercase-kebab segments, `beam.realm.overlays`.
+ * The canonical {@see RegistryKey}: dot-separated lowercase segments, `beam.realm.overlays`.
  *
  * ## It validates; it never repairs
  *
@@ -15,10 +15,29 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  *
  * - **Idempotence is trivially true.** Nothing is rewritten, so the question "is this input already
  *   normalized?" — the question that killed systemd's `systemd-escape --mangle` — cannot be asked.
- * - **The runtimes cannot disagree.** With the charset at `[a-z0-9-]` there is nothing to fold, so
+ * - **The runtimes cannot disagree.** The charset is ASCII-lowercase with no folding rule anywhere, so
  *   PHP `strtolower()` and JS `toLowerCase()` never diverge (the Turkish dotted/dotless `İ`/`ı` is
  *   the standing bug in every system that folds). A TS port is one regex and a `split('.')` — there
  *   is no mini-language to reproduce, because `..` / `...` / `..2` were all dropped.
+ *
+ * ## `-`, `_` and `:` are all legal INSIDE a segment; `.` alone separates
+ *
+ * Ticket 05 set the charset at `[a-z0-9-]` and pinned `beam_realm` and `beam:realm` as illegal. Ticket
+ * 30 widened it, on the dev's call, after the narrow charset started rejecting live estate keys rather
+ * than catching mistakes: `grounding.source.context_scope` — whose leaf is a key lifted from a customer
+ * grounding schema — and `ParticleOperationRegistry`'s `resource:name`, which ticket 21 D9 had recorded
+ * as the standing counter-example to "a rekey is a one-line attribute change".
+ *
+ * The widening admits CHARACTERS; it does not add a fold, so every property above survives intact. The
+ * separator is still `.` and only `.`, so `:` is not an alternate dot — `beam:realm` is now ONE segment
+ * spelled with a colon, not two segments. `/` stays rejected, because it means a composer coordinate
+ * and a MIME type and has no business inside an address.
+ *
+ * The joiners are interchangeable to the GRAMMAR and never to a reader: dotted-kebab remains the house
+ * spelling for anything newly written, and `_`/`:` exist so a domain that already spells its identity
+ * that way — a customer's schema key, a type-tagged instance id — is not forced through a rename it
+ * gains nothing from. Note the neighbouring `api-surface-coherence` map spent real effort REMOVING
+ * snake keys from the app surface; this widening is not a licence to put them back.
  * - **Parsing is here, not on the registry.** A `parseKey()` on `Registry` is a method a registry can
  *   override, and then two registries disagree about what a key IS — which breaks the index the
  *   moment a key crosses a package boundary.
@@ -37,10 +56,14 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 class Key implements RegistryKey
 {
     /**
-     * One segment: lowercase alphanumerics in kebab groups. `\z` rather than `$` on purpose — `$`
-     * would accept a trailing newline, which is a key that prints identically to a legal one.
+     * One segment: lowercase alphanumeric groups joined by `-`, `_` or `:`. A joiner may never lead,
+     * trail or double, so `_foo`, `foo:` and `a::b` are all still rejected — the widening is about
+     * which characters may sit BETWEEN groups, not about admitting ragged input.
+     *
+     * `\z` rather than `$` on purpose — `$` would accept a trailing newline, which is a key that
+     * prints identically to a legal one.
      */
-    public const SEGMENT_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*\z/';
+    public const SEGMENT_PATTERN = '/^[a-z0-9]+(?:[-_:][a-z0-9]+)*\z/';
 
     public const SEPARATOR = '.';
 
@@ -51,7 +74,8 @@ class Key implements RegistryKey
     public static function parse(string $key): self
     {
         return static::tryParse($key) ?? throw new InvalidRegistryKey(
-            "`{$key}` is not a legal registry key: expected dot-separated lowercase-kebab segments, e.g. `beam.realm.overlays`."
+            "`{$key}` is not a legal registry key: expected dot-separated lowercase segments, e.g. `beam.realm.overlays`. "
+                .'Segments may join groups with `-`, `_` or `:`, but never lead, trail or double one, and `/` is not a key character.'
         );
     }
 
