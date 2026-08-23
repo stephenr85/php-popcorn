@@ -4,23 +4,13 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 use Rushing\Popcorn\Registries\Key;
 
 /**
- * Drives every case in the shared conformance corpus (registry-kernel ticket 05). The corpus is JSON
- * rather than inline datasets so the TS port (ticket 16) asserts the same cases instead of a second
+ * Drives the grammar half of the shared conformance corpus (registry-kernel ticket 05). The corpus is
+ * JSON rather than inline datasets so the TS port (ticket 16) asserts the same cases instead of a second
  * reading of the prose — drift between the two runtimes is the risk this file exists to remove.
+ *
+ * The `routing` section is driven by `RegistryIndexTest`, and the {@see corpus()} loader moved to
+ * `tests/Pest.php` when it acquired that second caller.
  */
-function corpus(string $section): array
-{
-    static $decoded;
-
-    $decoded ??= json_decode(
-        file_get_contents(__DIR__.'/../../Fixtures/conformance/registry-key.json'),
-        associative: true,
-        flags: JSON_THROW_ON_ERROR,
-    );
-
-    return $decoded[$section];
-}
-
 dataset('grammar', fn () => array_map(
     fn (array $case) => [$case['input'], $case['segments']],
     corpus('grammar'),

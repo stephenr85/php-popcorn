@@ -1,5 +1,5 @@
 {
-    "$comment": "Conformance corpus for the RegistryKey grammar (registry-kernel ticket 05). Data, not PHP, so the TS port (ticket 16) and the enum codegen (ticket 12) assert against the SAME cases rather than a re-reading of the prose. Every entry here is executable: tests/Unit/Registries/KeyTest.php drives all three sections. Ticket 30 widened the segment charset to admit `-`, `_` and `:` as internal joiners; the two cases ticket 05 pinned as illegal (`beam_realm`, `beam:realm`) are now legal SINGLE segments, and the joiner-may-not-lead-trail-or-double rule is pinned in their place. Longest-prefix ROUTING cases are deliberately absent — the index does not exist yet; ticket 21 adds a fourth section when it lands.",
+    "$comment": "Conformance corpus for the RegistryKey grammar (registry-kernel ticket 05). Data, not PHP, so the TS port (ticket 16) and the enum codegen (ticket 12) assert against the SAME cases rather than a re-reading of the prose. Every entry here is executable: tests/Unit/Registries/KeyTest.php drives the first three sections and tests/Unit/Registries/RegistryIndexTest.php drives `routing`. Ticket 30 widened the segment charset to admit `-`, `_` and `:` as internal joiners; the two cases ticket 05 pinned as illegal (`beam_realm`, `beam:realm`) are now legal SINGLE segments, and the joiner-may-not-lead-trail-or-double rule is pinned in their place. Ticket 16 added `routing` — chartered to 21, which closed without it — because longest-prefix routing is the ONLY piece of pure behaviour a second runtime has to reproduce: the grammar ports to a regex and a split, the enums are data, but the walk is an algorithm, and it was the one thing the corpus did not cover. Note for a porter: `Key::SEGMENT_PATTERN` ends in `\\z`, which JavaScript does not have — port it as `$`, or the matcher inverts silently.",
     "grammar": [
         {
             "input": "beam",
@@ -281,6 +281,93 @@
             "under": "beam.realm",
             "isUnder": false,
             "why": "same trap one level deeper"
+        }
+    ],
+    "routing": [
+        {
+            "$comment": "Longest-prefix routing over declared roots: which registry owns a key. `roots` are the roots described into the index BESIDE its own; the index always declares the zero-segment root, so a case never lists it. `owner` is the root that claims the key, `\"\"` meaning the index itself, and null meaning nothing claims it."
+        },
+        {
+            "roots": [
+                "beam"
+            ],
+            "key": "beam.realm",
+            "owner": "beam",
+            "why": "a root claims every key beneath it"
+        },
+        {
+            "roots": [
+                "beam"
+            ],
+            "key": "beam",
+            "owner": "beam",
+            "why": "an exact hit on a declared root is a hit, not a miss"
+        },
+        {
+            "roots": [
+                "beam",
+                "beam.realm"
+            ],
+            "key": "beam.realm.overlays",
+            "owner": "beam.realm",
+            "why": "THE case this section exists for: roots may nest, and the LONGEST prefix wins"
+        },
+        {
+            "roots": [
+                "beam",
+                "beam.realm"
+            ],
+            "key": "beam.particle",
+            "owner": "beam",
+            "why": "the deeper root does not shadow the shallower one for keys outside its branch"
+        },
+        {
+            "roots": [
+                "popcorn",
+                "popcorn.invocables"
+            ],
+            "key": "popcorn.invocables.codegen",
+            "owner": "popcorn.invocables",
+            "why": "the live estate shape after ticket 30 — not a contrived nesting"
+        },
+        {
+            "roots": [
+                "beam.realm"
+            ],
+            "key": "beam.realms",
+            "owner": null,
+            "why": "routing is segment-wise, never character-wise; `beam.realms` is not under `beam.realm` however much the strings suggest it"
+        },
+        {
+            "roots": [
+                "beam.realm"
+            ],
+            "key": "beam",
+            "owner": null,
+            "why": "a root DEEPER than the key claims nothing; the prefix relation only runs one way"
+        },
+        {
+            "roots": [
+                "beam"
+            ],
+            "key": "graph.stores",
+            "owner": null,
+            "why": "nothing claims it — and the index's own zero-segment root must NOT be the fallback, or no key could ever fail to route and every miss would hand back a registry"
+        },
+        {
+            "roots": [],
+            "key": null,
+            "owner": "",
+            "why": "null KEY means the zero-segment root key, and it is spelled that way because the empty STRING cannot express it: `routeTo(\"\")` throws, since an empty string arriving from config or a request is a bug rather than an address. So the index's own root is an exact hit — the one way it is reachable — but only through the explicit root constructor. A port that routes by rendered key cannot express this case at all, which is the sharp form of the rule that a wire format must not read `\"\"` as absent."
+        },
+        {
+            "roots": [
+                "beam",
+                "beam.realm"
+            ],
+            "key": "beam.realm",
+            "owner": "beam.realm",
+            "why": "an exact hit beats the shallower root that also prefixes it"
         }
     ]
 }

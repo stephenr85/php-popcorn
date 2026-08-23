@@ -108,6 +108,14 @@ it('forgets and supersedes a foreign key by its segments', function () {
     expect($registry->resolve($key))->toBe('tenant-webhook')
         ->and($registry->superseded($key))->toHaveCount(1);
 
+    // The record holds the KEY, not its rendering (ticket 16). `Superseded::$key` was a string until
+    // that ticket, which was invisible: `Key` round-trips through `(string)`, so every test passed and
+    // supersession history was lossy for exactly the keys that cannot be reconstructed from a rendering.
+    // The same trap ticket 11 found in `BasicRegistry`, in a place a green suite could not report.
+    expect($registry->superseded($key)[0]->key)->toBeInstanceOf(NamespaceUriKey::class)
+        ->and($registry->superseded($key)[0]->key->equals($key))->toBeTrue()
+        ->and($registry->superseded($key)[0]->entry)->toBe('local-default');
+
     $registry->forget($key);
 
     expect($registry->has($key))->toBeFalse()

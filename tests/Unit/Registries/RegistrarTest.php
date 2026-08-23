@@ -63,11 +63,20 @@ it('names the config key as the registrant on every write', function () {
         ->and($superseded[0]->by)->toBe('beam.core.renderings');
 });
 
+/**
+ * `source()` is DISPLAY-ONLY and its format is deliberately not pinned (ticket 16 D7, confirming
+ * ticket 07's recommendation). It names the place a human goes to contribute, so what must hold is that
+ * the place is IN there — not how it is punctuated. The earlier byte-exact assertions pinned a wire
+ * format nobody had decided to have: a second runtime baking registrar output would say
+ * `config beam.core.renderings` about a source that no longer exists at read time, so this is the one
+ * field two implementations have every reason to word differently and none to agree on.
+ */
 it('renders each registrar source in a form that says where to contribute', function () {
     expect((new ConfigRegistrar([], 'beam.core.renderings'))->source())
-        ->toBe('config beam.core.renderings')
+        ->toContain('beam.core.renderings')
         ->and((new AttributeRegistrar([__DIR__.'/Fixtures'], ScannedResource::class))->source())
-        ->toBe('#[ScannedResource] under '.__DIR__.'/Fixtures');
+        ->toContain('ScannedResource')
+        ->toContain(__DIR__.'/Fixtures');
 });
 
 it('scans for an attribute, projects each class, and keys off the projected entry', function () {
@@ -161,7 +170,7 @@ it('exposes its registrars generically, for the index derived source column', fu
     expect($registry)->toBeInstanceOf(Filled::class)
         ->and($registry->registrars())->toBe([$registrar])
         ->and(array_map(fn (Registrar $r) => $r->source(), $registry->registrars()))
-        ->toBe(['config beam.core.renderings']);
+        ->each->toContain('beam.core.renderings');
 });
 
 it('replays a cached registrar writes instead of re-reading the source', function () {
@@ -249,8 +258,11 @@ it('lets the wrapped registrar read the registry it is actually filling', functi
 });
 
 it('keeps the wrapped source unannotated, because caching is not where entries come from', function () {
-    $cached = CachedRegistrar::inMemory(new ConfigRegistrar([], 'beam.core.renderings'));
+    $wrapped = new ConfigRegistrar([], 'beam.core.renderings');
+    $cached = CachedRegistrar::inMemory($wrapped);
 
-    expect($cached->source())->toBe('config beam.core.renderings')
+    // Asserted against the wrapped registrar rather than a literal: what matters is that the decorator
+    // is transparent, not how the string is punctuated (ticket 16 D7 — `source()` is display-only).
+    expect($cached->source())->toBe($wrapped->source())
         ->and($cached->registrar())->toBeInstanceOf(ConfigRegistrar::class);
 });

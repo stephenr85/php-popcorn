@@ -538,7 +538,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
     private function supersede(array $displaced): void
     {
         $this->superseded[$this->identity($displaced['segments'])][] = new Superseded(
-            (string) $displaced['key'],
+            $displaced['key'],
             $displaced['entry'],
             $displaced['by'],
             $displaced['sequence'],

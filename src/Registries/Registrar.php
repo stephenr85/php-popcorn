@@ -47,12 +47,24 @@ namespace Rushing\Popcorn\Registries;
  * {@see OnDuplicate::Supersede} alone, with no tier, no branch and no precedence rule (ticket 07 D9).
  * Lazy-on-first-read would invert exactly that and let config beat explicit registration.
  *
- * ## What a registrar writes is serialisable by construction
+ * ## What a registrar writes is serialisable — where its projection returns data
  *
  * Both registrars read *declarative* sources — arrays and class-strings — so registrar output can be
  * cached ({@see Registrars\CachedRegistrar}) and, in principle, baked for a TS port. Hand-registration
  * carries no such guarantee: `SchemaSources`' own hint registers a closure. The line falls out of what
  * the sources ARE rather than being legislated (ticket 07 D12).
+ *
+ * **Ticket 07 D12 stated this more strongly than the code supports, and ticket 16 corrected it.** The
+ * honest form: closures are confined to hand-registration **and to registrar CONFIGURATION**, and a
+ * registrar's output is serialisable only where its projection returns data.
+ * {@see Registrars\AttributeRegistrar} takes two callables — `$project`, which turns a scanned class
+ * into an entry, and `$key` — so a host can project a scanned class into anything at all, including an
+ * object closing over a closure. That is a deliberate seam, not a leak: refusing it would be the kernel
+ * legislating what a host may register, which this map has declined to do five times over. But it means
+ * "registrar output is serialisable by construction" is a property of the SOURCES, not a guarantee of
+ * the interface, and anything baking registrar output for another runtime has to check the projection
+ * rather than trust the shape. {@see Registrars\RegistrarCache} already states the same caveat from the
+ * cache's end.
  */
 interface Registrar
 {

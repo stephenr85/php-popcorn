@@ -323,3 +323,52 @@ it('survives a bulk unwind naming its own class, rather than un-hosting itself',
 
     expect($index->resolve(Key::root()))->toBe($index);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Longest-prefix routing, from the shared conformance corpus
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The corpus's `routing` section (registry-kernel ticket 16, paying off ticket 21's unmet acceptance
+ * item). The cases above assert routing inline and stay as they are; these assert the SAME walk from
+ * data a second runtime can read.
+ *
+ * Routing is the reason this section had to exist. Everything else the corpus covers ports to something
+ * a porter cannot get subtly wrong — the grammar is a regex and a `split('.')`, the three surviving
+ * enums are backed strings, and `parent()`/`isUnder()` are array slices. Longest-prefix routing is an
+ * algorithm, with two ways to get it wrong that both look right: matching characters instead of
+ * segments, and letting the index's zero-segment root serve as a fallback so that nothing ever fails to
+ * route. Both are pinned below.
+ */
+dataset('routing', fn () => array_map(
+    fn (array $case) => [$case],
+    array_values(array_filter(corpus('routing'), fn (array $case) => ! isset($case['$comment']))),
+));
+
+it('routes a key to the registry whose declared root is its longest prefix', function (array $case) {
+    $index = new RegistryIndex;
+
+    foreach ($case['roots'] as $root) {
+        $index->describe(store($root));
+    }
+
+    // A null key in the corpus is the zero-segment root, which has no string spelling — see the case's
+    // own `why`. Everything else routes by the string a caller would actually write.
+    $routed = $index->routeTo($case['key'] ?? Key::root());
+    $why = $case['why'] ?? '';
+
+    if ($case['owner'] === null) {
+        expect($routed)->toBeNull($why);
+
+        return;
+    }
+
+    if ($case['owner'] === '') {
+        expect($routed)->toBe($index, $why);
+
+        return;
+    }
+
+    expect($routed)->toBeInstanceOf(BasicRegistry::class, $why)
+        ->and($routed->root())->toBe($case['owner'], $why);
+})->with('routing');

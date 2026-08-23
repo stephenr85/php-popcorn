@@ -62,6 +62,14 @@ class Key implements RegistryKey
      *
      * `\z` rather than `$` on purpose — `$` would accept a trailing newline, which is a key that
      * prints identically to a legal one.
+     *
+     * ⚠️ **Do not port this pattern verbatim to JavaScript. The JS equivalent is `$`, not `\z`.**
+     * JS has no `\z`; unflagged it is an identity escape for a literal `z`, so a copied pattern
+     * rejects every legal key and accepts `beamz` — an inverted matcher with no syntax error to
+     * catch it. JS `$` without the `m` flag means what PHP's `\z` means (PHP's `$` is the loose one,
+     * which is why this is `\z` here and `$` there). The grammar itself ports fine; the *text* of the
+     * pattern does not, and the conformance corpus at `tests/Fixtures/conformance/registry-key.json`
+     * is what fails loudly the day someone copies it anyway (ticket 16).
      */
     public const SEGMENT_PATTERN = '/^[a-z0-9]+(?:[-_:][a-z0-9]+)*\z/';
 

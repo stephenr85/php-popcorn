@@ -37,7 +37,24 @@ enum RegistryArity: string
     /** Run ALL entries — a conjunction/enumeration; every registered entry is engaged. */
     case RunAll = 'run-all';
 
-    /** A one-line account of what a read of this arity does. */
+    /**
+     * A one-line account of what a read of this arity does.
+     *
+     * ## The bound: a case may carry prose about itself, and nothing else
+     *
+     * This is the last method left on any of the kernel's enums — `Resolution` and `Miss` were never
+     * built (ticket 06) and `ManifestSeam` was deleted (07) — and it stays for the reason `registerHint`
+     * was deleted: prose that lives *on* the declaration cannot drift from it, and prose written beside
+     * it in a renderer is 52 drift surfaces waiting to happen (ticket 01 D10). Today's one caller is
+     * `popcorn:registries`; the operator tree and any doctor report are the next, and they must not each
+     * re-word this.
+     *
+     * The bound that makes it safe, and the thing to check before adding the next one: **a case may
+     * carry prose ABOUT ITSELF and nothing else** — no behaviour a second runtime would have to
+     * reproduce, no value a caller branches on. These three enums are otherwise pure data, i.e. the
+     * generated half of a TS port, carrying zero drift risk (ticket 16). A `blurb()`-shaped addition
+     * that returns something a caller acts on is not display prose and does not belong here.
+     */
     public function blurb(): string
     {
         return match ($this) {
