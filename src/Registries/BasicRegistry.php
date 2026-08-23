@@ -86,7 +86,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * what makes enumerate-then-resolve round-trip through {@see RegistryIndex}, where a relative key would
  * mean nothing without also knowing which registry it came from.
  */
-class BasicRegistry implements Forgettable, Gated, Nested, RecordsSupersession, Registry
+class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupersession, Registry
 {
     /**
      * Segments joined for use as a PHP array key. NUL is the separator because segments are opaque —
@@ -100,6 +100,9 @@ class BasicRegistry implements Forgettable, Gated, Nested, RecordsSupersession, 
 
     /** @var array<string, list<Superseded>> */
     private array $superseded = [];
+
+    /** @var list<Registrar> */
+    private array $registrars = [];
 
     private int $sequence = 0;
 
@@ -189,6 +192,27 @@ class BasicRegistry implements Forgettable, Gated, Nested, RecordsSupersession, 
         $this->authorizer = $authorizer;
 
         return $this;
+    }
+
+    /**
+     * Attach a registrar and let it fill this store immediately.
+     *
+     * The eagerness is {@see Filled}'s decision, and holding it here rather than in each owner is what
+     * makes it uniform: an owner that composes a `BasicRegistry` gets ticket 07 D9's ordering — attach
+     * at boot, hand-register later, later wins by {@see OnDuplicate::Supersede} — without writing a line
+     * of it.
+     */
+    public function attach(Registrar $registrar): void
+    {
+        $this->registrars[] = $registrar;
+
+        $registrar->fill($this);
+    }
+
+    /** @return list<Registrar> */
+    public function registrars(): array
+    {
+        return $this->registrars;
     }
 
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static

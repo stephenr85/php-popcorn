@@ -23,7 +23,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  *
  * ## Six methods, and what is deliberately not here
  *
- * - **No `attach()` / `registrars()`** — they live on `Filled`, because a registry that only ever
+ * - **No `attach()` / `registrars()`** — they live on {@see Filled}, because a registry that only ever
  *   hand-registers should not have to answer them (ticket 07 D8).
  * - **No `forget()` / `forgetBy()`** — they live on {@see Forgettable}. A registry that cannot be torn
  *   down simply does not implement it, and the type system carries the fact (ticket 08 D8).

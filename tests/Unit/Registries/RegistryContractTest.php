@@ -60,8 +60,10 @@ it('keeps attach, forget and the tree walks OFF the base interface', function ()
     expect($methods)->toBe(['has', 'keys', 'matches', 'register', 'resolve', 'tryResolve', 'unfiltered'])
         ->and(interface_exists(Forgettable::class))->toBeTrue()
         ->and(interface_exists(Nested::class))->toBeTrue()
-        // `Filled` is ticket 24's; asserted absent so this ticket cannot quietly grow into it.
-        ->and(interface_exists(Filled::class))->toBeFalse();
+        // Landed by ticket 24. The assertion that matters is no longer that `Filled` is absent, but
+        // that `attach`/`registrars` stayed OFF the base interface when it arrived — which is what the
+        // method list above pins.
+        ->and(interface_exists(Filled::class))->toBeTrue();
 });
 
 it('declares root, of, arity, entryType — and no seam', function () {
