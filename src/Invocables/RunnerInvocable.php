@@ -13,7 +13,7 @@ use Rushing\Popcorn\Runner\Result;
 /**
  * The adapter that carries a {@see Runner} into the array-in/array-out {@see Invocable} world
  * (popcorn-runner ticket 01) — the payoff of the whole seam. Because it *is* an Invocable, a
- * sandboxed run is `CachedInvocable`-wrappable and a legal `StrategyLadder` rung with **no** kernel
+ * sandboxed run is `CachedInvocable`-wrappable and a legal `Ladder` rung with **no** kernel
  * change; the registry overrides it by name like any other capability.
  *
  * `binding()` is {@see Binding::Local} — locality and mechanism are different axes (popcorn ADR-0001):

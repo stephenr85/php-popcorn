@@ -1,26 +1,26 @@
 <?php
 
-namespace Rushing\Popcorn\Strategy;
+namespace Rushing\Popcorn\Ladders;
 
 /**
- * Runs strategies strongest-first, taking the first result that clears the
+ * Runs rungs strongest-first, taking the first result that clears the
  * acceptance threshold; weaker rungs are tried only when stronger ones abstain
  * or fall short. Returns null when every rung declines — the caller's reviewer
  * floor. Per-region demotion (a clean front resolved by the strong rung, an
- * ambiguous tail by a weaker one) is just calling resolve per region.
+ * ambiguous tail by a weaker one) is just calling climb per region.
  */
-class StrategyLadder
+class Ladder
 {
-    /** @var Strategy[] */
+    /** @var Rung[] */
     private array $rungs;
 
     public function __construct(
-        Strategy ...$rungs,
+        Rung ...$rungs,
     ) {
         $this->rungs = $rungs;
     }
 
-    public function resolve(array $input, float $acceptAbove = 0.0): ?StrategyResult
+    public function climb(array $input, float $acceptAbove = 0.0): ?RungResult
     {
         foreach ($this->rungs as $rung) {
             $result = $rung->attempt($input);
@@ -36,6 +36,6 @@ class StrategyLadder
     /** @return string[] rung names, strongest-first */
     public function rungs(): array
     {
-        return array_map(fn (Strategy $s) => $s->name(), $this->rungs);
+        return array_map(fn (Rung $s) => $s->name(), $this->rungs);
     }
 }

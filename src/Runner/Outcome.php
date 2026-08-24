@@ -2,7 +2,7 @@
 
 namespace Rushing\Popcorn\Runner;
 
-use Rushing\Popcorn\Strategy\StrategyLadder;
+use Rushing\Popcorn\Ladders\Ladder;
 
 /**
  * The closed spine of a run's verdict (popcorn-runner ticket 06) — the `match`-able case
@@ -44,10 +44,10 @@ enum Outcome: string
 
     /**
      * A denied grant is a policy verdict, not "this strategy didn't work out": it must
-     * propagate past a {@see StrategyLadder} (fail-loud), while
+     * propagate past a {@see Ladder} (fail-loud), while
      * every capability failure demotes to the next rung (ticket 06).
      */
-    public function demotesStrategyLadder(): bool
+    public function demotesLadder(): bool
     {
         return match ($this) {
             self::Success, self::GrantDenied => false,

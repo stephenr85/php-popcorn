@@ -17,7 +17,7 @@ use Rushing\Popcorn\Runner\Result;
  * Binding-orthogonal: a Runner is not a new {@see Binding} case. It is a *plug*
  * behind the Invocable socket, adapted into the array-in/array-out world by
  * {@see RunnerInvocable}, so the entire kernel (`CachedInvocable`,
- * `StrategyLadder`, registry override-by-name) composes over a sandboxed run unchanged.
+ * `Ladder`, registry override-by-name) composes over a sandboxed run unchanged.
  *
  * The kernel pulls in **no** bwrap/wasmtime dependency — the mechanics live entirely in the
  * substrate packages (`laravel-popcorn-bubble`, `laravel-popcorn-wasm`). The kernel ships only the

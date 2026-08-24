@@ -61,8 +61,8 @@ it('suppresses the throw when the mapper returns null', function () {
 });
 
 it('demotes capability failures on the ladder but a GrantDenied propagates', function () {
-    expect(Outcome::Timeout->demotesStrategyLadder())->toBeTrue()
-        ->and(Outcome::NonZeroExit->demotesStrategyLadder())->toBeTrue()
-        ->and(Outcome::GrantDenied->demotesStrategyLadder())->toBeFalse()
-        ->and(Outcome::Success->demotesStrategyLadder())->toBeFalse();
+    expect(Outcome::Timeout->demotesLadder())->toBeTrue()
+        ->and(Outcome::NonZeroExit->demotesLadder())->toBeTrue()
+        ->and(Outcome::GrantDenied->demotesLadder())->toBeFalse()
+        ->and(Outcome::Success->demotesLadder())->toBeFalse();
 });
