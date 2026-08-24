@@ -17,6 +17,8 @@ use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\DeclaredRegistry;
+use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\InheritingRegistry;
+use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\OverridingRegistry;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\UndeclaredRegistry;
 
 /**
@@ -86,6 +88,44 @@ it('reaches OnDuplicate and Optionality as declared registry properties, not jus
     expect($store->declaration()->onDuplicate)->toBe(OnDuplicate::Reject)
         ->and($store->declaration()->optionality)->toBe(Optionality::Required)
         ->and($store->root())->toBe('beam.resources');
+});
+
+/**
+ * Ticket 42, landing 41 D11. Subclassing is the estate's shipped extension mechanism, and PHP does not
+ * inherit class attributes — so without the walk a subclass of a declared registry is not merely
+ * invisible to the conformance audits, it cannot be constructed, because `for()` reads `static::class`.
+ */
+it('walks up to the nearest declaration, so an undeclaring subclass inherits its parents root', function () {
+    $declaration = IsRegistry::of(InheritingRegistry::class);
+
+    expect($declaration->root)->toBe('beam.resources')
+        ->and($declaration->arity)->toBe(RegistryArity::RunAll)
+        ->and($declaration->onDuplicate)->toBe(OnDuplicate::Reject)
+        // The fatal half ticket 28 found in laravel-graphine's own suite: this line threw.
+        ->and(BasicRegistry::for(InheritingRegistry::class)->root())->toBe('beam.resources');
+});
+
+it('lets the NEAREST declaration win, so a subclass still takes its own branch by declaring one', function () {
+    $declaration = IsRegistry::of(OverridingRegistry::class);
+
+    expect($declaration->root)->toBe('beam.overrides')
+        ->and($declaration->arity)->toBe(RegistryArity::PickOne)
+        ->and($declaration->entryType)->toBe('int')
+        ->and($declaration->onDuplicate)->toBe(OnDuplicate::Admit)
+        // Nothing is merged: the parent's non-default Optionality does not leak through the override.
+        ->and($declaration->optionality)->toBe(Optionality::Optional)
+        ->and(BasicRegistry::for(OverridingRegistry::class)->root())->toBe('beam.overrides');
+});
+
+it('says WHERE the governing declaration is written, which is what tells one registry from a collision', function () {
+    expect(IsRegistry::declaredOn(DeclaredRegistry::class))->toBe(DeclaredRegistry::class)
+        ->and(IsRegistry::declaredOn(InheritingRegistry::class))->toBe(DeclaredRegistry::class)
+        ->and(IsRegistry::declaredOn(OverridingRegistry::class))->toBe(OverridingRegistry::class)
+        ->and(IsRegistry::declaredOn(UndeclaredRegistry::class))->toBeNull();
+});
+
+it('still finds nothing where neither the class nor any ancestor declares', function () {
+    expect(IsRegistry::of(UndeclaredRegistry::class))->toBeNull();
 });
 
 it('refuses to compose a store for a class that declares nothing, rather than inventing a root', function () {
