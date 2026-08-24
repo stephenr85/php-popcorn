@@ -5,6 +5,7 @@ use Rushing\Popcorn\Registries\BasicRegistry;
 use Rushing\Popcorn\Registries\Exceptions\AmbiguousRegistryMatch;
 use Rushing\Popcorn\Registries\Exceptions\DuplicateRegistryKey;
 use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
+use Rushing\Popcorn\Registries\Exceptions\ShadowedRegistryKey;
 use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
 use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\IsRegistry;
@@ -372,3 +373,79 @@ it('routes a key to the registry whose declared root is its longest prefix', fun
     expect($routed)->toBeInstanceOf(BasicRegistry::class, $why)
         ->and($routed->root())->toBe($case['owner'], $why);
 })->with('routing');
+
+// ---------------------------------------------------------------------------------------------
+// Interleaved roots are legal; shadowing is not (ticket 26)
+// ---------------------------------------------------------------------------------------------
+
+it('admits a root nested inside another, because longest-prefix routing is what nesting is for', function () {
+    $index = new RegistryIndex;
+    $particle = store('beam.particle')->register('fragments', 'the fragments resource');
+    $ops = store('beam.particle.fragments.ops')->register('download', 'the download op');
+
+    $index->describe($particle)->describe($ops);
+
+    // The interleaving the consumer wanted: a resource and its ops addressable in one keyspace, each
+    // read landing in the registry that owns it. Neither key is ambiguous and neither registry holds a
+    // mixed entry type — which is what saves ticket 01 §3 here rather than breaching it.
+    expect($index->routeTo('beam.particle.fragments'))->toBe($particle)
+        ->and($index->routeTo('beam.particle.fragments.ops.download'))->toBe($ops);
+});
+
+it('refuses a deeper root that would shadow an entry the shallower registry already holds', function () {
+    $index = new RegistryIndex;
+    $particle = store('beam.particle')->register('fragments.ops.download', 'reachable, for now');
+
+    $index->describe($particle);
+
+    expect(fn () => $index->describe(store('beam.particle.fragments.ops')))
+        ->toThrow(ShadowedRegistryKey::class);
+
+    // Refused rather than recorded: the entry is still readable through the door it was written at.
+    expect($index->routeTo('beam.particle.fragments.ops.download'))->toBe($particle);
+});
+
+it('refuses the same collision described in the other order', function () {
+    $index = new RegistryIndex;
+    $index->describe(store('beam.particle.fragments.ops'));
+
+    // Now the SHALLOWER registry arrives, already carrying the key the deeper root owns. Same defect,
+    // opposite arrival order — a registry may be described before or after the one it nests with.
+    expect(fn () => $index->describe(store('beam.particle')->register('fragments.ops.download', 'x')))
+        ->toThrow(ShadowedRegistryKey::class);
+});
+
+it('names both roots and the entry that would have gone dark', function () {
+    $index = new RegistryIndex;
+    $index->describe(store('beam.particle')->register('fragments.ops.download', 'x'));
+
+    try {
+        $index->describe(store('beam.particle.fragments.ops'));
+    } catch (ShadowedRegistryKey $shadowed) {
+        expect($shadowed->key)->toBe('beam.particle.fragments.ops.download')
+            ->and($shadowed->shallower)->toBe('beam.particle')
+            ->and($shadowed->deeper)->toBe('beam.particle.fragments.ops')
+            ->and($shadowed->getMessage())->toContain('two answers');
+
+        return;
+    }
+
+    $this->fail('describing a shadowing root should have thrown');
+});
+
+it('does not treat its own zero-segment root as a shadow of everything', function () {
+    // The index is a prefix of every key in the estate and its entries are ROOTS rather than entry
+    // keys, so a naive check would refuse every registry there is, on a category error.
+    $index = new RegistryIndex;
+
+    expect(fn () => $index->describe(store('beam.particle')->register('fragments', 'x')))
+        ->not->toThrow(ShadowedRegistryKey::class);
+});
+
+it('leaves a sibling root alone, segment-wise, however much the strings suggest otherwise', function () {
+    $index = new RegistryIndex;
+    $index->describe(store('beam.realm')->register('overlays.article', 'x'));
+
+    // `beam.realms` is not under `beam.realm`, so nothing it could hold is shadowed by it.
+    expect(fn () => $index->describe(store('beam.realms')))->not->toThrow(ShadowedRegistryKey::class);
+});

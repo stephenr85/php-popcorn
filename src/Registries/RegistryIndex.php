@@ -93,11 +93,14 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      *
      * @throws InvalidArgumentException the store can say what root it owns
      * @throws Exceptions\DuplicateRegistryKey another registry already claims that root
+     * @throws Exceptions\ShadowedRegistryKey the new root would make an existing entry unreadable
      */
     public function describe(Registry $store, ?object $owner = null, ?string $by = null): static
     {
         $declaration = $this->declarationOf($store, $owner);
         $root = $declaration->rootKey();
+
+        $this->assertUnshadowed($store, $root);
 
         $this->registries->register(
             $root,
@@ -115,6 +118,74 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
         $this->push($store);
 
         return $this;
+    }
+
+    /**
+     * Refuse a root that would make an already-registered entry unreadable (ticket 26 D5).
+     *
+     * Interleaved roots are LEGAL — {@see routeTo()} handles nesting by construction. What is refused is
+     * the narrower case where one absolute key falls inside two described registries, because then the
+     * answer depends on which door the caller entered. Both directions are checked, since a registry may
+     * be described before or after the one it nests with:
+     *
+     *  - the incoming root sits under an existing registry that already holds a key at or below it;
+     *  - an existing root sits under the incoming registry, which already holds a key at or below THAT.
+     *
+     * **The self-hosting entry is never a party to this.** The index's root is zero-segment, i.e. a
+     * prefix of every key in the estate, and its "entries" are roots rather than entry keys — checking it
+     * would refuse every registry there is, on a category error.
+     *
+     * ## The window this leaves, deliberately
+     *
+     * A registry is often described before its registrars fill it, so the entry that will collide may not
+     * exist yet at describe time. Closing that would mean `BasicRegistry::register()` consulting the
+     * index on every write, which inverts a dependency the kernel keeps one-way — the store knows nothing
+     * about the index, and that is what lets a registry be used without one. The residual window is
+     * carried by the beam-side conformance audit instead (ticket 49), which reads the live index after
+     * boot and sees exactly the state this check cannot.
+     */
+    private function assertUnshadowed(Registry $incoming, RegistryKey $root): void
+    {
+        $described = $this->registries->unfiltered();
+
+        foreach ($described->keys() as $existingRoot) {
+            if ($existingRoot->segments() === []) {
+                continue;
+            }
+
+            $existing = $described->resolve($existingRoot);
+
+            if (! $existing instanceof Registry || $existing === $this) {
+                continue;
+            }
+
+            if ($this->isUnder($root, $existingRoot->segments())) {
+                $this->refuseShadowed($existing, $root, $existingRoot, $root);
+            }
+
+            if ($this->isUnder($existingRoot, $root->segments())) {
+                $this->refuseShadowed($incoming, $existingRoot, $root, $existingRoot);
+            }
+        }
+    }
+
+    /**
+     * Look for a key in `$holder` at or below `$boundary`, and throw naming it if one is there.
+     *
+     * `$shallower` and `$deeper` are the two roots as the message needs them, rather than being re-derived
+     * here: the caller already knows which of the pair is the outer one and passing it beats guessing.
+     */
+    private function refuseShadowed(
+        Registry $holder,
+        RegistryKey $boundary,
+        RegistryKey $shallower,
+        RegistryKey $deeper,
+    ): void {
+        foreach ($holder->unfiltered()->keys() as $key) {
+            if ($key->equals($boundary) || $this->isUnder($key, $boundary->segments())) {
+                throw Exceptions\ShadowedRegistryKey::for($key, $shallower, $deeper);
+            }
+        }
     }
 
     /**
