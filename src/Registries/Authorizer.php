@@ -3,8 +3,12 @@
 namespace Rushing\Popcorn\Registries;
 
 /**
- * The seam through which a host answers "may the caller see this entry?" — the ONE thing a tag
- * cannot express, because the answer depends on who is asking.
+ * The seam through which a host answers "may the caller see this entry?" — the one thing no static
+ * declaration can express, because the answer depends on who is asking.
+ *
+ * (This sentence used to read "the ONE thing a tag cannot express", which quietly implied the kernel
+ * had tags. It never did, and per ticket 31 it never will — see {@see IsRegistry}'s "What is
+ * deliberately not a field".)
  *
  * Popcorn does not gate. It has no actor, no permission model and no `illuminate/*` dependency to
  * borrow one from; it exposes this and a host supplies the policy. `splicewire/laravel-beam`

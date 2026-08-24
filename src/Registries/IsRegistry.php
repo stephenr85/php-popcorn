@@ -39,6 +39,16 @@ use ReflectionClass;
  * - **No `registerHint`.** With `of` + `entryType` + {@see HasRegistryKey} + the resolve/tryResolve
  *   pair, most of the estate's 52 hand-written hints are derivable; the residue is caveats, which is
  *   what `note` carries. That deletes 52 drift surfaces (ticket 01 D10).
+ * - **No `tags`.** Grouping is **membership in a registry**, not a field on the declaration: if you want
+ *   "every registry on the operator surface", register them into a registry keyed by {@see RegistryKey}
+ *   and read its `keys()`. That is strictly more capable than a flat tag list — it is gated per entry by
+ *   the same {@see Authorizer} (a static tag cannot answer *who is asking*, which is the one thing that
+ *   docblock says a tag cannot express), it carries a payload rather than a bare string, and it is this
+ *   package's own doctrine applied to itself. Ticket 05 §5 decided the opposite and ticket 06 D12
+ *   relocated the read to a `Tagged` companion; **both are overruled by ticket 31**, on ticket 17 D3.
+ *   Note this is a POINTER, not a bare refusal: the grouping mechanism exists and is specified — it is
+ *   built beam-side by the successor UX map, not here. There is no `Tagged` interface and no
+ *   `matching()`; do not re-add one without reading ticket 31.
  */
 #[Attribute(Attribute::TARGET_CLASS)]
 class IsRegistry
