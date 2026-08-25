@@ -74,12 +74,46 @@ it('declares root, of, arity, entryType — and no seam', function () {
     expect($declaration)->toBeInstanceOf(IsRegistry::class)
         ->and($declaration->root)->toBe('beam.resources')
         ->and($declaration->of)->toBe('test entries, for the contract suite')
-        ->and($declaration->arity)->toBe(RegistryArity::RunAll)
+        ->and($declaration->arity)->toBe([RegistryArity::RunAll])
         ->and($declaration->entryType)->toBe('string')
         ->and($declaration->rootKey()->segments())->toBe(['beam', 'resources'])
         ->and(property_exists($declaration, 'seam'))->toBeFalse()
         ->and(property_exists($declaration, 'where'))->toBeFalse()
         ->and(property_exists($declaration, 'registerHint'))->toBeFalse();
+});
+
+/**
+ * Ticket 47. Two shipped registries read in two steps — `PipelineRegistry` picks a named pipeline then
+ * composes its stages, `ResourceRenderingRegistry` picks a resource then runs its renderings — and both
+ * descriptors recorded only the inner step. `arity` is the read path outermost-first.
+ *
+ * The bare case stays legal on purpose: 77 of 79 registries have one step, and if declaring the common
+ * case got uglier the estate would drift back to the wrong scalar. What must NOT vary is the stored
+ * shape, because ticket 16 records `popcorn:registries --json` as the presumptive TS wire projection and
+ * a sometimes-scalar field is the worst thing to put on a wire. So: scalar in, list out, always.
+ */
+it('normalises a bare arity to a one-member list, so the stored shape never varies', function () {
+    $bare = new IsRegistry(root: 'test.bare', of: 'one step', arity: RegistryArity::PickOne);
+    $listed = new IsRegistry(root: 'test.listed', of: 'one step, written as a list', arity: [RegistryArity::PickOne]);
+
+    expect($bare->arity)->toBe([RegistryArity::PickOne])
+        ->and($listed->arity)->toBe([RegistryArity::PickOne])
+        ->and($bare->arity)->toBe($listed->arity);
+});
+
+it('keeps a multi-step arity in declaration order, outermost first', function () {
+    $declaration = new IsRegistry(
+        root: 'test.pipelines',
+        of: 'a named chain: pick the pipeline, then compose its stages',
+        arity: [RegistryArity::PickOne, RegistryArity::ComposeMany],
+    );
+
+    expect($declaration->arity)->toBe([RegistryArity::PickOne, RegistryArity::ComposeMany]);
+});
+
+it('refuses an empty arity, because a read engages at least one entry', function () {
+    expect(fn () => new IsRegistry(root: 'test.empty', of: 'nothing', arity: []))
+        ->toThrow(InvalidArgumentException::class, 'test.empty');
 });
 
 it('reaches OnDuplicate and Optionality as declared registry properties, not just loose enums', function () {
@@ -99,7 +133,7 @@ it('walks up to the nearest declaration, so an undeclaring subclass inherits its
     $declaration = IsRegistry::of(InheritingRegistry::class);
 
     expect($declaration->root)->toBe('beam.resources')
-        ->and($declaration->arity)->toBe(RegistryArity::RunAll)
+        ->and($declaration->arity)->toBe([RegistryArity::RunAll])
         ->and($declaration->onDuplicate)->toBe(OnDuplicate::Reject)
         // The fatal half ticket 28 found in laravel-graphine's own suite: this line threw.
         ->and(BasicRegistry::for(InheritingRegistry::class)->root())->toBe('beam.resources');
@@ -109,7 +143,7 @@ it('lets the NEAREST declaration win, so a subclass still takes its own branch b
     $declaration = IsRegistry::of(OverridingRegistry::class);
 
     expect($declaration->root)->toBe('beam.overrides')
-        ->and($declaration->arity)->toBe(RegistryArity::PickOne)
+        ->and($declaration->arity)->toBe([RegistryArity::PickOne])
         ->and($declaration->entryType)->toBe('int')
         ->and($declaration->onDuplicate)->toBe(OnDuplicate::Admit)
         // Nothing is merged: the parent's non-default Optionality does not leak through the override.

@@ -21,6 +21,13 @@ namespace Rushing\Popcorn\Registries;
  * Orthogonal to {@see Optionality}, which asks the separate question "is EMPTY an error?" — OSGi's
  * split, and the one this enum was missing.
  *
+ * ## One case is one STEP; a declaration carries a list of them
+ *
+ * A registry may read in more than one step — pick a named pipeline, then compose that pipeline's
+ * stages — so {@see IsRegistry::$arity} is a list, outermost first, and a case is one step of it rather
+ * than the whole answer (ticket 47). Nothing changes here: the enum stays three cases, {@see blurb()}
+ * stays prose about one case, and joining several into a rendering is the renderer's job.
+ *
  * There is no `seam` beside it. `ManifestSeam` is deleted: its seven cases were a census of the
  * pre-Popcorn world — how ~55 bespoke registries happened to get filled *because none of them shared a
  * contract* — and once they share one, "how do I inject?" has a uniform answer, which is that you call

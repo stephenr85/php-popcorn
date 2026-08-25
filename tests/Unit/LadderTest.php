@@ -1,7 +1,7 @@
 <?php
 
-use Rushing\Popcorn\Ladders\Rung;
 use Rushing\Popcorn\Ladders\Ladder;
+use Rushing\Popcorn\Ladders\Rung;
 use Rushing\Popcorn\Ladders\RungResult;
 
 /** A test rung: yields a fixed result, or abstains when $abstain. */
