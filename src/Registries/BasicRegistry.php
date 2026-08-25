@@ -384,6 +384,31 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
     }
 
     /**
+     * The three branches {@see resolve()} takes, reported instead of thrown (ticket 46).
+     *
+     * Written as its own walk rather than as a `try { resolve() }` — catching the kernel's own control
+     * flow would make a probe cost an exception per branch node, which is what a lazy tree does most
+     * of, and would report `Entry` for an address holding several admitted entries by way of the
+     * ambiguity the caller was probing to avoid. `has()` is the exact-match question and answers first.
+     *
+     * The root key is not a special case: {@see door()} stamps it, so a registry rooted at `beam`
+     * asked about the zero-segment key is asked about `beam` — `Branch` once it holds anything, and
+     * `Entry` in the one case that owns an entry at its own root ({@see RegistryIndex} self-hosting).
+     */
+    public function nodeAt(RegistryKey|string $key): RegistryNode
+    {
+        $key = $this->door($key);
+
+        if ($this->visibleAt($key) !== []) {
+            return RegistryNode::Entry;
+        }
+
+        return $this->visible($this->recordsUnder($key)) === []
+            ? RegistryNode::Absent
+            : RegistryNode::Branch;
+    }
+
+    /**
      * {@see keys()} with the declared root stripped back off — keys as the CALLER spelled them.
      *
      * The inverse of {@see door()}, and it lives here for the same reason door() does: "relative in,
@@ -463,7 +488,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return $this->recordsAt($key)[0] ?? null;
     }
 
-    /** @return list<array{key: string, entry: mixed, by: string|null, ability: string|null, sequence: int}> */
+    /** @return list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}> */
     private function recordsAt(RegistryKey $key): array
     {
         $segments = $key->segments();
@@ -498,13 +523,13 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      * what makes installing an authorizer incapable of narrowing an already-open surface (ticket 09 D2),
      * and why {@see Authorizer::allows()} can take a non-nullable ability.
      *
-     * @param  list<array{key: string, entry: mixed, by: string|null, ability: string|null, sequence: int}>  $records
-     * @return list<array{key: string, entry: mixed, by: string|null, ability: string|null, sequence: int}>
+     * @param  list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}>  $records
+     * @return list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}>
      */
     private function visible(array $records): array
     {
         if ($this->authorizer === null) {
-            return array_values($records);
+            return $records;
         }
 
         return array_values(array_filter($records, function (array $record) {

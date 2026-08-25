@@ -17,6 +17,7 @@ use Rushing\Popcorn\Registries\Optionality;
 use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryKey;
+use Rushing\Popcorn\Registries\RegistryNode;
 
 /**
  * Resolves a capability name to whatever currently answers it. Registering a new invocable under an
@@ -139,6 +140,11 @@ class InvocableRegistry implements Forgettable, Gated, Nested, Registry
     public function descendants(RegistryKey|string $key): array
     {
         return $this->entries->descendants($key);
+    }
+
+    public function nodeAt(RegistryKey|string $key): RegistryNode
+    {
+        return $this->entries->nodeAt($key);
     }
 
     public function unfiltered(): Registry

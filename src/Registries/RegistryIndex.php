@@ -415,6 +415,129 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
         return $this->registries->descendants($key);
     }
 
+    public function nodeAt(RegistryKey|string $key): RegistryNode
+    {
+        return $this->registries->nodeAt($key);
+    }
+
+    /**
+     * {@see nodeAt()} over the whole KEYSPACE rather than over the index's own entries.
+     *
+     * ## Why the index carries two altitudes, and how to tell them apart
+     *
+     * The index's entries are registries, so its inherited {@see Nested} verbs — `children()`,
+     * `descendants()`, `nodeAt()` — answer about ROOTS. They are the right answer to "what registries
+     * live under here" and the wrong one to "what does the keyspace look like here", and the two
+     * diverge the moment roots interleave (ticket 26 D0: `beam.particle` and
+     * `beam.particle.fragments.ops` may both be described, and `routeTo()` already routes between them
+     * by longest prefix). The `*Across` pair is the keyspace altitude. Bare verb = this index's own
+     * entries; `Across` = every entry in every registry it holds.
+     *
+     * ## What it reports, and the one case that reads Absent
+     *
+     * `Entry` when the registry that OWNS the address holds one there; `Branch` when either half of
+     * the union continues below it — the owning registry's own entries, or a deeper root. A registry
+     * described at exactly this address but holding nothing reads **`Absent`**, deliberately: this
+     * verb reports the entry keyspace, and an empty registry contributes no addresses to it. Ask
+     * {@see nodeAt()} or {@see owner()} for registry membership, which is a different question with a
+     * different right answer.
+     */
+    public function nodeAcross(RegistryKey|string $key): RegistryNode
+    {
+        $key = Key::of($key);
+        $owner = $this->owningTree($key);
+
+        $local = $owner === null ? RegistryNode::Absent : $owner->nodeAt($key);
+
+        if ($local === RegistryNode::Entry) {
+            return RegistryNode::Entry;
+        }
+
+        return $local === RegistryNode::Branch || $this->nodeAt($key) === RegistryNode::Branch
+            ? RegistryNode::Branch
+            : RegistryNode::Absent;
+    }
+
+    /**
+     * The children of `$key` WHEREVER THEY LIVE — entry-children unioned with child roots, across the
+     * registry boundary (ticket 46, charter expanded by ticket 26 D8).
+     *
+     * Nothing unioned them before this. `$index->children()` returns child roots and
+     * `$registry->children()` returns child entry keys, so with `beam.particle` and
+     * `beam.particle.fragments.ops` both described, no verb answered *"the children of
+     * `beam.particle.fragments`"* with the ops branch that genuinely lives below it — the interleaved
+     * tree ticket 26 had just sanctioned could not be enumerated or displayed.
+     *
+     * ## It returns bare keys, not (key, owning registry) pairs
+     *
+     * The pair shape was considered for the round of routing it saves a lazy tree, and refused: the
+     * union's members include branches that belong to NO registry. `beam.particle.fragments` above is
+     * derived from a root two segments deeper, and `routeTo()` hands it to `beam.particle`'s registry,
+     * which does not hold it. A pair would therefore have to carry a null — or a lie — for exactly the
+     * nodes this ticket exists to make probeable, which is a second way to ask {@see nodeAcross()}
+     * rather than a saving. Bare keys also keep {@see Nested}'s signature, so a walker can switch
+     * altitudes without reshaping its loop.
+     *
+     * ## Index-only, and `descendants()` gets no counterpart
+     *
+     * A flat registry has no cross-boundary question to answer, and widening `Nested` with this would
+     * oblige every implementation to have an opinion about an index it may not have. The deep walk is
+     * refused on ticket 17 D2's measurement: the full walk of 7,980 entries costs 9.4 ms but **423.8
+     * KB of JSON for the bare keys alone**, so the decided model is registry-level eager, entry-level
+     * lazy — and a cross-registry `descendants()` is the one verb that makes materializing all of it
+     * an accident. A caller that genuinely wants the whole tree recurses this and pays visibly.
+     *
+     * ## It dedupes, though the invariant says it need not
+     *
+     * Ticket 26 D6 landed `assertUnshadowed()` at describe time — two described registries may not
+     * both answer for one absolute key — which is what lets this be a plain merge rather than a
+     * precedence rule. The dedupe is defensive anyway, because that check leaves a **residual window**
+     * (a registry described before its registrars fill it, carried by ticket 49), and a duplicated
+     * node in a tree walk is a silent double-render rather than a caught error. Where both halves
+     * offer the same address, the owning registry's own key object wins, so a foreign key type keeps
+     * its rendering.
+     *
+     * @return list<RegistryKey>
+     */
+    public function childrenAcross(RegistryKey|string $key): array
+    {
+        $key = Key::of($key);
+        $owner = $this->owningTree($key);
+
+        $children = $owner === null ? [] : $owner->children($key);
+
+        foreach ($this->children($key) as $root) {
+            $children[] = $root;
+        }
+
+        $found = [];
+
+        foreach ($children as $child) {
+            // Joined on NUL for the same reason BasicRegistry's identity is: segments are opaque, and
+            // a foreign key may legitimately contain `.` or `/`, so joining on either could collide
+            // two distinct keyspaces onto one bucket.
+            $found[implode("\x00", $child->segments())] ??= $child;
+        }
+
+        return array_values($found);
+    }
+
+    /**
+     * The registry whose own tree answers for `$key`, or null where the index itself would.
+     *
+     * Excluding `$this` is what keeps the two altitudes apart: the index is a legal routing target (it
+     * declares the zero-segment root and self-hosts there), so without this a keyspace question about
+     * an unrouted key would fall back to the ROOT-level answer and read as though entries lived there.
+     * The {@see Nested} check is the honest one rather than an assumption — {@see Registry} does not
+     * promise a tree, and a consumer's own implementation may not offer one.
+     */
+    private function owningTree(RegistryKey $key): ?Nested
+    {
+        $owner = $this->routeTo($key);
+
+        return $owner instanceof Nested && $owner !== $this ? $owner : null;
+    }
+
     public function unfiltered(): Registry
     {
         $unfiltered = clone $this;

@@ -61,55 +61,7 @@ parameters:
 			path: src/Registries/BasicRegistry.php
 
 		-
-			message: '#^Method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:branchKeys\(\) should return list\<Rushing\\Popcorn\\Registries\\RegistryKey\> but returns list\<Rushing\\Popcorn\\Registries\\BranchKey\|string\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:keys\(\) should return list\<Rushing\\Popcorn\\Registries\\RegistryKey\> but returns list\<string\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:recordAt\(\) never returns array\{key\: Rushing\\Popcorn\\Registries\\RegistryKey, segments\: list\<string\>, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\} so it can be removed from the return type\.$#'
-			identifier: return.unusedType
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:recordAt\(\) should return array\{key\: Rushing\\Popcorn\\Registries\\RegistryKey, segments\: list\<string\>, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\|null but returns array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:recordsAt\(\) should return list\<array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\> but returns list\<array\{key\: Rushing\\Popcorn\\Registries\\RegistryKey, segments\: list\<string\>, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:visibleAt\(\) should return list\<array\{key\: Rushing\\Popcorn\\Registries\\RegistryKey, segments\: list\<string\>, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\> but returns list\<array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Offset ''segments'' does not exist on array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: src/Registries/BasicRegistry.php
-
-		-
 			message: '#^Parameter \#1 \$array \(list\<array\{key\: string, by\: string\|null\}\>\) of array_values is already a list, call has no effect\.$#'
-			identifier: arrayValues.list
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$array \(list\<array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\>\) of array_values is already a list, call has no effect\.$#'
 			identifier: arrayValues.list
 			count: 1
 			path: src/Registries/BasicRegistry.php
@@ -117,36 +69,6 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$array \(list\<mixed\>\) of array_values is already a list, call has no effect\.$#'
 			identifier: arrayValues.list
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$records of method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:candidates\(\) expects list\<array\{key\: Rushing\\Popcorn\\Registries\\RegistryKey, segments\: list\<string\>, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\>, non\-empty\-list\<array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\> given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$records of method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:visible\(\) expects list\<array\{key\: string, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\>, list\<array\{key\: Rushing\\Popcorn\\Registries\\RegistryKey, segments\: list\<string\>, entry\: mixed, by\: string\|null, ability\: string\|null, sequence\: int\}\> given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$segments of class Rushing\\Popcorn\\Registries\\BranchKey constructor expects list\<string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$segments of method Rushing\\Popcorn\\Registries\\BasicRegistry\:\:identity\(\) expects list\<string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 of callable callable\(list\<string\>\)\: bool expects list\<string\>, array given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/Registries/BasicRegistry.php
 
