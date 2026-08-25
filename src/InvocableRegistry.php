@@ -62,9 +62,10 @@ use Rushing\Popcorn\Registries\RegistryKey;
     entryType: Invocable::class,
     onDuplicate: OnDuplicate::Supersede,
     optionality: Optionality::Optional,
-    note: 'Duplicate names are the swap seam, not an accident: three voice providers ship under '
-        .'`voice.convert` and two music renderers under `music.render`, and the last provider registered '
-        .'is the one that answers.',
+    note: 'Duplicate names are the swap seam, not an accident: re-registering a name overrides the '
+        .'prior binding, so a package default swaps for a host- or tenant-specific one without any '
+        .'caller changing. Live case: `Rushing\PrismPlus\PrismPlusManager::register()`, whose own '
+        .'capability registries are seeded with built-in providers a host then overrides by name.',
 )]
 class InvocableRegistry implements Forgettable, Gated, Nested, Registry
 {
