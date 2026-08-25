@@ -1,0 +1,13 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    paths:
+        - src/
+
+    # The estate's six analysing hosts run larastan at level 7. This kernel is
+    # framework-free (`mustNotRequire: illuminate/*`), so it takes plain phpstan —
+    # and being framework-free it can afford to run STRICTER than its consumers,
+    # which is the point: a wrong `@template` published from here is read by every
+    # host that analyses, so popcorn's own annotations must be checked hardest.
+    level: 8
