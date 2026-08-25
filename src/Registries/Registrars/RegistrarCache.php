@@ -15,13 +15,14 @@ namespace Rushing\Popcorn\Registries\Registrars;
  *
  * ## Staleness is not here
  *
- * There is no `forget()`, no TTL and no version stamp, and their absence is the ticket boundary rather
- * than an oversight (ticket 07 D7 hands invalidation to ticket 12, which then dissolved without taking
- * it — the question is live in this map's fog, owned by nobody, and the shape visible so far is that a
- * discovery cache is a disposable per-environment runtime artifact and probably wants Laravel's
- * `optimize`/`optimize:clear` hooks rather than a bespoke command). The shipped
- * {@see ArrayRegistrarCache} sidesteps it entirely by living exactly one boot, which is honest about
- * what has actually been decided.
+ * There is no `forget()`, no TTL and no version stamp, and that is now a decision rather than a ticket
+ * boundary. Ticket 07 D7 handed invalidation to ticket 12, which dissolved without taking it; ticket 39
+ * answered it by measurement: the cross-process discovery cache **already exists on the Laravel side** as
+ * `Splicewire\Beam\Frame\FrameResourceManifest` — a per-host class-string manifest in `bootstrap/cache/`,
+ * hooked into `ServiceProvider::optimizes()`, taking route-cache stale-until-cleared semantics. The
+ * `optimize`/`optimize:clear` shape 12 D5 guessed at was right and was already built. So this seam does
+ * not grow a persistent implementation, and the shipped {@see ArrayRegistrarCache} living exactly one
+ * boot is the whole of it.
  *
  * ## A persistent implementation inherits one constraint
  *

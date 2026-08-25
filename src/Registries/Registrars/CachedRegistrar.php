@@ -26,10 +26,17 @@ use Rushing\Popcorn\Registries\Registry;
  *
  * ## Staleness is not handled here, and the miss is louder than it looks
  *
- * There is no invalidation. Ticket 07 D7 handed that to ticket 12, and ticket 12 dissolved without
- * taking it, so the question is live in this map's fog and owned by nobody. Whoever takes it should read
- * {@see RegistrarCache} first. The shipped default is {@see ArrayRegistrarCache}, which lives one boot
- * and therefore cannot go stale — a cross-process cache is the thing that would need the answer.
+ * There is no invalidation, and there is not going to be one here. Ticket 07 D7 handed staleness to
+ * ticket 12, ticket 12 dissolved without taking it, and registry-kernel ticket 39 finally answered it:
+ * **the cross-process discovery cache is not a kernel concern, because the estate already has one.**
+ * `Splicewire\Beam\Frame\FrameResourceManifest` writes an opcache-friendly class-string manifest to
+ * `bootstrap/cache/` and is wired through `ServiceProvider::optimizes()` — the Laravel-side home ticket
+ * 24 D5 predicted, built before the question was asked. So this decorator stays in-process on purpose.
+ * The shipped default is {@see ArrayRegistrarCache}, which lives one boot and therefore cannot go stale.
+ *
+ * If you are here because you want a persistent one: 39 refused it on the two-beneficiary bar, both
+ * beneficiaries being inside `splicewire/laravel-beam`, and every package requiring `rushing/php-popcorn`
+ * is a Laravel package — so there is no framework-free host for a kernel-side file cache to serve.
  *
  * ## What it does NOT wrap
  *
