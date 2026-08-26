@@ -39,11 +39,20 @@ enum OnDuplicate: string
     /**
      * Both entries live under the one key, and disambiguation is deferred to read time.
      *
-     * Tower's `CapabilityRegistry` is the exemplar and the reason this case exists: it *cannot*
-     * throw at write, because *"hydration runs automatically on every tenant switch, so a duplicate
-     * slipping through must never brick the whole overlay"* — so a duplicated alias lands as >1
-     * claimant and the read refuses it loudly as ambiguous. Deterministic refusal, never a silent
-     * pick, and never a null-to-empty.
+     * Tower's capability layer is the reason this case exists: it *cannot* throw at write, because
+     * *"hydration runs automatically on every tenant switch, so a duplicate slipping through must
+     * never brick the whole overlay"* — so a duplicated alias lands as >1 claimant and the read
+     * refuses it loudly as ambiguous. Deterministic refusal, never a silent pick, and never a
+     * null-to-empty.
+     *
+     * ⚠️ That motivating shape is **not** a declaration of this policy, and this docblock used to say
+     * it was (*"Tower's `CapabilityRegistry` is the exemplar"*). Checked live by registry-kernel
+     * ticket 44: the alias pool and its ambiguity refusal live in
+     * `Splicewire\Tower\Circuit\Capabilities\CapabilityLadder`, which declares no `#[IsRegistry]` at
+     * all; tower's two capability registries both declare `Supersede`. The **declaring** exemplars are
+     * `Splicewire\Beam\Rendering\ResourceRenderingRegistry` and
+     * `Splicewire\Beam\Realm\RealmOverlayRegistry`. Cite those; the tower story is provenance, not an
+     * instance.
      *
      * The only policy under which {@see Exceptions\MissReason::Ambiguous} can fire at an EXACT key
      * — and only then under `PickOne`, since under `ComposeMany`/`RunAll` several matches are the
