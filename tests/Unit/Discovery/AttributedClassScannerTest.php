@@ -54,3 +54,18 @@ it('finds a class whose docblock/const contain false-positive "class" substrings
 
     expect($found)->toContain(ProseWithClassSubstring::class);
 });
+
+it('enumerates every loadable class under a path, unfiltered', function () use ($path) {
+    $found = (new AttributedClassScanner)->classesIn([$path]);
+
+    // Attribute-free enumeration: `Plain` comes back alongside the annotated ones, because the
+    // keep/drop test belongs to callers whose filter is not an attribute at all.
+    expect($found)->toContain(Annotated::class)
+        ->and($found)->toContain(SubAnnotated::class)
+        ->and($found)->toContain(Plain::class)
+        ->and($found)->toContain(ProseWithClassSubstring::class);
+});
+
+it('returns empty from classesIn when no path exists', function () {
+    expect((new AttributedClassScanner)->classesIn(['/no/such/dir']))->toBe([]);
+});

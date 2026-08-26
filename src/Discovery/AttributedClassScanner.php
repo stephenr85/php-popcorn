@@ -38,6 +38,26 @@ class AttributedClassScanner
      */
     public function scan(array $paths, string $attributeClass, bool $instanceof = true): array
     {
+        return array_values(array_filter(
+            $this->classesIn($paths),
+            fn (string $class): bool => $this->hasAttribute($class, $attributeClass, $instanceof),
+        ));
+    }
+
+    /**
+     * Every loadable class-string under `$paths`, unfiltered.
+     *
+     * The enumeration half of {@see scan()} on its own, for discoverers whose keep/drop test is not
+     * an attribute at all — `isSubclassOf(Data::class)` is the case that forced it out
+     * (`schemastud/laravel-data-schemas` was carrying a third copy of the regex this class replaced).
+     * Filtering stays the caller's: this returns what is THERE, which is the only question a file
+     * scanner can answer without borrowing someone else's vocabulary.
+     *
+     * @param  array<int, string>  $paths  filesystem paths (files or directories) to scan
+     * @return list<class-string>
+     */
+    public function classesIn(array $paths): array
+    {
         $existing = array_filter($paths, 'file_exists');
 
         if ($existing === []) {
@@ -55,9 +75,7 @@ class AttributedClassScanner
                 continue;
             }
 
-            if ($this->hasAttribute($class, $attributeClass, $instanceof)) {
-                $found[] = $class;
-            }
+            $found[] = $class;
         }
 
         return $found;
