@@ -43,6 +43,13 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * also what lets {@see OnDuplicate::Admit} keep two live entries under one key without a nested-array
  * special case.
  *
+ * "Registration order" means the order a key was **first** registered in, not the order it was last
+ * written in: a supersession replaces the entry in its slot and does not move it to the end
+ * (registry-kernel ticket 62, argued on {@see OnDuplicate::Supersede}). The record's `position` field
+ * carries that slot and is what {@see matches()} sorts on; `sequence` stays the record's identity and
+ * its registration time. The two are equal for everything that is never superseded, which is almost
+ * everything.
+ *
  * ## What it does NOT do
  *
  * No merge, no normalisation, no reach. `resolve()` never walks up a key — the tree is for enumeration,
@@ -109,7 +116,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      */
     private const IDENTITY_SEPARATOR = "\x00";
 
-    /** @var list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}> */
+    /** @var list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}> */
     private array $entries = [];
 
     /** @var array<string, list<Superseded>> */
@@ -231,10 +238,29 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return $this->registrars;
     }
 
-    /** @param  TEntry  $entry */
+    /**
+     * Write an entry, applying the declared duplicate policy.
+     *
+     * A supersession lands **in the displaced entry's slot** rather than at the end — registry-kernel
+     * ticket 62, and see {@see OnDuplicate::Supersede} for why. That is what `$slot` is doing here: the
+     * new record inherits the displaced record's `position` and is spliced back into the same index,
+     * so the store's array order stays identical to its position order and every read that walks
+     * `$this->entries` in natural order (`keys()`, `relativeKeys()`, `descendants()`, `unfiltered()`)
+     * inherits the rule without knowing about it.
+     *
+     * `position` is ORDERING; `sequence` is IDENTITY and registration time. They are equal until
+     * something is superseded, and they must not be collapsed into one field: `supersede()` finds the
+     * displaced record by `sequence`, and {@see Superseded::$sequence} means "in what order did this
+     * happen", which a re-used slot number would silently stop meaning.
+     *
+     * @param  TEntry  $entry
+     */
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static
     {
         $key = $this->door($key);
+
+        $slot = null;
+        $position = $this->sequence;
 
         if ($this->declaration->onDuplicate !== OnDuplicate::Admit) {
             $occupant = $this->recordAt($key);
@@ -244,18 +270,28 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
             }
 
             if ($occupant !== null) {
-                $this->supersede($occupant);
+                $position = $occupant['position'];
+                $slot = $this->supersede($occupant);
             }
         }
 
-        $this->entries[] = [
+        $record = [
             'key' => $key,
             'segments' => $key->segments(),
             'entry' => $entry,
             'by' => $by,
             'ability' => $ability,
+            'position' => $position,
             'sequence' => $this->sequence++,
         ];
+
+        if ($slot === null) {
+            $this->entries[] = $record;
+
+            return $this;
+        }
+
+        array_splice($this->entries, $slot, 0, [$record]);
 
         return $this;
     }
@@ -320,7 +356,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
 
         $matched = $this->visible(array_merge($this->recordsAt($key), $this->recordsUnder($key)));
 
-        usort($matched, fn (array $a, array $b) => $a['sequence'] <=> $b['sequence']);
+        usort($matched, fn (array $a, array $b) => $a['position'] <=> $b['position']);
 
         return array_map(fn (array $record) => $record['entry'], $matched);
     }
@@ -504,13 +540,13 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return implode(self::IDENTITY_SEPARATOR, $segments);
     }
 
-    /** @return array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}|null */
+    /** @return array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}|null */
     private function recordAt(RegistryKey $key): ?array
     {
         return $this->recordsAt($key)[0] ?? null;
     }
 
-    /** @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}> */
+    /** @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}> */
     private function recordsAt(RegistryKey $key): array
     {
         $segments = $key->segments();
@@ -524,7 +560,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      * Compares segment ARRAYS rather than re-parsing the rendered string, which is what lets a foreign
      * key type participate in the tree at all (ticket 11).
      *
-     * @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>
+     * @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}>
      */
     private function recordsUnder(RegistryKey $key): array
     {
@@ -545,8 +581,8 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      * what makes installing an authorizer incapable of narrowing an already-open surface (ticket 09 D2),
      * and why {@see Authorizer::allows()} can take a non-nullable ability.
      *
-     * @param  list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>  $records
-     * @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>
+     * @param  list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}>  $records
+     * @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}>
      */
     private function visible(array $records): array
     {
@@ -570,14 +606,14 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         }));
     }
 
-    /** @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}> */
+    /** @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}> */
     private function visibleAt(RegistryKey $key): array
     {
         return $this->visible($this->recordsAt($key));
     }
 
     /**
-     * @param  list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>  $records
+     * @param  list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}>  $records
      * @return list<array{key: string, by: string|null}>
      */
     private function candidates(array $records): array
@@ -588,8 +624,16 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         );
     }
 
-    /** @param  array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}  $displaced */
-    private function supersede(array $displaced): void
+    /**
+     * Record the displaced entry as history and lift it out of the live store.
+     *
+     * Returns the INDEX it vacated, which is the slot the superseding entry takes — see
+     * {@see register()}. Matched on `sequence` because that is the record's identity; `position` is
+     * shared with whatever replaces it and would match two records after a second supersession.
+     *
+     * @param  array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, position: int, sequence: int}  $displaced
+     */
+    private function supersede(array $displaced): int
     {
         $this->superseded[$this->identity($displaced['segments'])][] = new Superseded(
             $displaced['key'],
@@ -598,9 +642,18 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
             $displaced['sequence'],
         );
 
-        $this->entries = array_values(array_filter(
-            $this->entries,
-            fn (array $record) => $record['sequence'] !== $displaced['sequence'],
-        ));
+        $slot = count($this->entries);
+
+        foreach ($this->entries as $index => $record) {
+            if ($record['sequence'] === $displaced['sequence']) {
+                $slot = $index;
+
+                break;
+            }
+        }
+
+        array_splice($this->entries, $slot, 1);
+
+        return $slot;
     }
 }

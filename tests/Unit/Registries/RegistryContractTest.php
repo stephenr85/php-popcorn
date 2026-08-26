@@ -260,6 +260,47 @@ it('does not feed a superseded entry to a read, and records what it displaced', 
         ->and($store->superseded('beam.resources.order')[0]->by)->toBe('splicewire/laravel-beam');
 });
 
+/**
+ * Registry-kernel ticket 62. The kernel shipped displace-then-append first, and a flagship realm test
+ * caught it: re-registering the FIRST realm sent it to the back of `all()`. `OnDuplicate::Supersede`
+ * now overrides in place, so "registration order" means the order of FIRST registration and a host
+ * swapping one shipped default cannot silently re-sort a list it never touched.
+ */
+it('keeps the slot when a key is superseded, rather than moving it to the end', function () {
+    $store = registry()
+        ->register('beam.resources.operator', 'operator')
+        ->register('beam.resources.tenant', 'tenant')
+        ->register('beam.resources.site', 'site')
+        ->register('beam.resources.operator', 'operator (overridden)');
+
+    expect($store->matches('beam.resources'))->toBe(['operator (overridden)', 'tenant', 'site'])
+        ->and(array_map('strval', $store->keys()))->toBe([
+            'beam.resources.operator',
+            'beam.resources.tenant',
+            'beam.resources.site',
+        ]);
+});
+
+it('keeps the ORIGINAL slot when a key is superseded twice', function () {
+    $store = registry()
+        ->register('beam.resources.operator', 'v1')
+        ->register('beam.resources.tenant', 'tenant')
+        ->register('beam.resources.operator', 'v2')
+        ->register('beam.resources.operator', 'v3');
+
+    expect($store->matches('beam.resources'))->toBe(['v3', 'tenant'])
+        ->and($store->superseded('beam.resources.operator'))->toHaveCount(2);
+});
+
+it('gives an Admit duplicate its own slot, because nothing was replaced', function () {
+    $store = registry(OnDuplicate::Admit)
+        ->register('beam.resources.operator', 'a')
+        ->register('beam.resources.tenant', 'tenant')
+        ->register('beam.resources.operator', 'b');
+
+    expect($store->matches('beam.resources'))->toBe(['a', 'tenant', 'b']);
+});
+
 it('destroys the superseded history along with the entry, because a survivor IS the leak', function () {
     $store = registry()
         ->register('beam.resources.order', 'first', by: 'splicewire/laravel-beam')
