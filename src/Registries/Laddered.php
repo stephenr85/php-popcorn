@@ -3,11 +3,37 @@
 namespace Rushing\Popcorn\Registries;
 
 /**
- * A registry whose own {@see Registry::resolve()} is an ordered climb over declared tiers.
+ * An ordered climb over declared tiers — either a {@see Registry} whose own {@see Registry::resolve()}
+ * is that climb, or a ladder that reads over registries it does not own.
  *
  * Optional, and separate from {@see Registry} for the same reason {@see Gated}, {@see Nested} and
  * {@see Forgettable} are: a capability the type system carries. Named by registry-kernel ticket 33,
  * landed by ticket 36.
+ *
+ * ## `Laddered` does NOT imply `Registry` — the two positions
+ *
+ * This docblock said *"a registry whose own resolve()"* until registry-kernel ticket 57, and that was
+ * falsified by **ticket 44 D0**, which ruled `Splicewire\Tower\Circuit\Capabilities\CapabilityLadder`
+ * out of the registry population *while it declares this interface*. 44 corrected two other docblocks
+ * that had leaned on the same false inference ({@see OnDuplicate::Admit} here in the kernel, and beam's
+ * `RegistryConformanceAudit`); this is the third, and it is the one that matters most, because an audit
+ * now reads it.
+ *
+ * 33's taxonomy gives two legal positions, and the difference is mechanical — read it off the
+ * `implements` clause, not off the class name:
+ *
+ *   - **Position 2 — a registry that is itself a ladder.** `implements Laddered, Registry`, carries
+ *     `#[IsRegistry]`, owns a root. `Splicewire\Beam\Particle\ParticleResourceRegistry` is the estate's.
+ *   - **Position 3 — a ladder over registries it does not own.** `implements Laddered` and nothing
+ *     else: no `#[IsRegistry]`, no root, no index membership, none of `Registry`'s seven methods. Its
+ *     rungs cross a boundary between the registries it composes, which is precisely why it stays its own
+ *     class instead of folding into one of them. `CapabilityLadder` is the estate's.
+ *
+ * So **declaring `Laddered` is not a claim of registry-ness**, and `Laddered`-without-`Registry` is not
+ * a malformed registry — it is position 3, a shape the taxonomy sanctions. Beam's
+ * `UndescribedRegistryAudit` reads exactly that pair to eject position 3 from the population its
+ * structural test would otherwise suspect (ticket 57). That is a downward read — the audit sits above
+ * this kernel — and it is why the ejection needs no exemption list naming a consumer-tier class.
  *
  * ## It is DECLARATIVE — the kernel never climbs
  *
