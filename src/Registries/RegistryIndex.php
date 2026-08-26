@@ -72,6 +72,13 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
 
     private ?Authorizer $authorizer = null;
 
+    /**
+     * Whether this index is a deep-unfiltered view: the registries it hands back are unfiltered too.
+     * Set only by {@see unfiltered()}, never by a host — see that method for why it is not a one-level
+     * escape (registry-kernel ticket 45).
+     */
+    private bool $deep = false;
+
     public function __construct()
     {
         $this->registries = BasicRegistry::for($this);
@@ -251,7 +258,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
             }
         }
 
-        return $best === null ? null : $unfiltered->resolve($best);
+        return $best === null ? null : $this->reveal($unfiltered->resolve($best));
     }
 
     /**
@@ -442,17 +449,17 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
 
     public function resolve(RegistryKey|string $key): mixed
     {
-        return $this->registries->resolve($key);
+        return $this->reveal($this->registries->resolve($key));
     }
 
     public function tryResolve(RegistryKey|string $key): mixed
     {
-        return $this->registries->tryResolve($key);
+        return $this->reveal($this->registries->tryResolve($key));
     }
 
     public function matches(RegistryKey|string $key): array
     {
-        return $this->registries->matches($key);
+        return array_map(fn (mixed $store): mixed => $this->reveal($store), $this->registries->matches($key));
     }
 
     public function keys(): array
@@ -593,22 +600,89 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
         return $owner instanceof Nested && $owner !== $this ? $owner : null;
     }
 
+    /**
+     * The index with no authorizer, **all the way down** — the registries it hands back are unfiltered
+     * too (registry-kernel ticket 45).
+     *
+     * ## It escaped one level and reported success
+     *
+     * Until ticket 45 this unfiltered *which registries you can see* and handed back the live, still-gated
+     * singletons, so their ENTRIES stayed filtered. Measured three times, in three unrelated probes, and
+     * each one read as agreement rather than as a defect:
+     *
+     * ```
+     * index->unfiltered()->tryResolve($root)->keys()                 →  5 of 10
+     * index->unfiltered()->tryResolve($root)->unfiltered()->keys()   → 10 of 10
+     * ```
+     *
+     * Ticket 17's enumeration probe reported 4,030 of 7,980 for both the filtered and the "unfiltered"
+     * walk; ticket 29's `GraphSource` had to call `->unfiltered()` on every registry by hand to reach
+     * its 63-node count. **Zero measured callers wanted the one-level reading and three worked around
+     * it**, which is what makes this a defect rather than a taste — the same class as ticket 04 D1's
+     * `class_exists` guard, ticket 14's `require-dev` gate, 35 D3's symlink blindness and 41 D11's
+     * attribute non-inheritance: *visibility silently becoming a function of where you stand.*
+     *
+     * ## Why the index and only the index
+     *
+     * Only the index composes other registries, so only the index can be deep. A {@see Nested}
+     * registry's branches are its OWN store's records and are already filtered or unfiltered with it —
+     * `children()`, `descendants()` and `nodeAt()` read the same entry list `keys()` does, so there is
+     * no second instance of this defect one level down. {@see nodeAcross()} and {@see childrenAcross()}
+     * cross into an owned tree through {@see routeTo()} and therefore inherit the depth for free.
+     *
+     * ## What comes back is the STORE, not the port
+     *
+     * A composed registry's `unfiltered()` returns its inner {@see BasicRegistry}, not itself — that is
+     * the uniform estate implementation (`return $this->entries->unfiltered();`), and it is what every
+     * hand-rolled workaround was already getting. So the kernel view is what a deep read yields, and
+     * the port's domain sugar is not. Reach for {@see owner()} when you want the port; it is
+     * deliberately NOT deepened, because an owner need not be a registry at all.
+     *
+     * ## Still artisan-only
+     *
+     * Ticket 09 D11's trusted-shell policy is unchanged and deepening does not widen it. Whether a
+     * *browser* may ever be handed a tree baked through this door is a disclosure decision, not a depth
+     * one, and ticket 45 leaves it open — see its residue on the map.
+     */
     public function unfiltered(): Registry
     {
         $unfiltered = clone $this;
         $unfiltered->authorizer = null;
+        $unfiltered->deep = true;
         $unfiltered->registries = $this->registries->unfiltered();
 
         return $unfiltered;
     }
 
     /**
+     * Hand back a described store the way this index reads: as it is, or unfiltered under a deep read.
+     *
+     * `mixed` in and out rather than `Registry` in both slots, because this sits on the paths that
+     * return whatever the index holds — the entry type is `Registry<mixed>` by declaration, but the
+     * kernel does not enforce that at the call site and a hostile write would otherwise trip a cast
+     * here rather than at the door where it belongs.
+     */
+    private function reveal(mixed $store): mixed
+    {
+        return $this->deep && $store instanceof Registry ? $store->unfiltered() : $store;
+    }
+
+    /**
      * Where a store's declaration comes from.
      *
-     * {@see BasicRegistry} carries its OWNER's declaration — `BasicRegistry::for($this)` read it off the
-     * owning class — so a composed registry is asked for what it is already holding. Anything else
-     * declares the attribute on itself. The `instanceof` is on the kernel's own reference implementation
-     * rather than on a consumer's type, which is why it does not need an interface to hide behind.
+     * **A store that carries its declaration as a VALUE is asked; everything else declares on its
+     * class.** {@see BasicRegistry} is the first case — `BasicRegistry::for($this)` read the attribute
+     * off the owning class and has held it ever since, so a composed registry is asked for what it is
+     * already holding.
+     *
+     * This used to `instanceof BasicRegistry`, defended on the grounds that the test was on the
+     * kernel's own reference implementation rather than on a consumer's type. **Registry-kernel ticket
+     * 59 B1 measured the population that defence did not anticipate**: an archetype-**f** registry over
+     * an external store holds no `BasicRegistry` — holding no array is its defining property — so it
+     * fell through to the class attribute, which is exactly what ticket 26 D2 forbids for that family
+     * (one class, four roles, one root asserted across all of them). The type test is now
+     * {@see CarriesDeclaration}, which `BasicRegistry` implements, so the kernel's own case is
+     * unchanged and f can finally declare inline as the sweep brief's §3a-f step 5 prescribes.
      */
     /**
      * @template TStored
@@ -617,7 +691,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      */
     private function declarationOf(Registry $store, ?object $owner): IsRegistry
     {
-        $declaration = $store instanceof BasicRegistry
+        $declaration = $store instanceof CarriesDeclaration
             ? $store->declaration()
             : IsRegistry::of($store);
 

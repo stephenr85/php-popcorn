@@ -107,7 +107,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * constructor signature. Without it a level-8 run cannot prove the factory safe, and the estate has
  * no `final` to reach for.
  */
-class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupersession, Registry
+class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, Nested, RecordsSupersession, Registry
 {
     /**
      * Segments joined for use as a PHP array key. NUL is the separator because segments are opaque —
@@ -158,6 +158,12 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return new static($declaration);
     }
 
+    /**
+     * {@see CarriesDeclaration} — a `BasicRegistry` is constructed WITH its declaration, so it has
+     * always been able to answer this. Saying so on an interface rather than leaving the index to
+     * `instanceof` this class is registry-kernel ticket 59 B1: archetype **f** holds no `BasicRegistry`
+     * and still has to declare inline.
+     */
     public function declaration(): IsRegistry
     {
         return $this->declaration;
