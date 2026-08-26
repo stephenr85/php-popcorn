@@ -277,6 +277,31 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
     }
 
     /**
+     * The declaration of the registry described at exactly `$root`, or `null` when nothing is described
+     * there.
+     *
+     * Read from the LIVE registry rather than from the owner's class attribute, and that is the whole
+     * point of it: {@see BasicRegistry::__construct()} takes an {@see IsRegistry} as an instance field, so
+     * a registry whose root is computed at boot declares itself completely without any class ever
+     * carrying the attribute (ticket 26 D2). A reader that reflects the owner's class sees nothing there
+     * and concludes — wrongly — that the registry is undeclared.
+     *
+     * It delegates to the same {@see declarationOf()} `describe()` used, deliberately: a second copy of
+     * that resolution is how a tool comes to disagree with the index it is reporting on (ticket 49).
+     */
+    public function declarationAt(RegistryKey|string $root): ?IsRegistry
+    {
+        $root = Key::of($root);
+        $store = $this->registries->unfiltered()->tryResolve($root);
+
+        if (! $store instanceof Registry) {
+            return null;
+        }
+
+        return $this->declarationOf($store, $this->owners[(string) $root] ?? null);
+    }
+
+    /**
      * Install the host's authorizer: onto the index, into every registry it already holds, and — via
      * {@see describe()} — into every registry described after this call.
      *

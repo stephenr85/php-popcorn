@@ -121,6 +121,19 @@ it('returns the OWNER where one was named, and the store where none was', functi
         ->and($index->routeTo('beam.particle.resources.invoices'))->toBe($store);
 });
 
+it('reads a described registry\'s declaration off the LIVE registry, not off its owner\'s class', function () {
+    $index = new RegistryIndex;
+    // The owner is a bare stdClass — it carries no `#[IsRegistry]` and could not. The declaration exists
+    // only as the instance field the store was constructed with, which is the sanctioned way to root a
+    // registry at a value computed at boot (ticket 26 D2). A reader that reflects the owner sees nothing
+    // and concludes the registry is undeclared; that conclusion was a live defect in beam's gate (49).
+    $index->describe(store('beam.particle.resources'), new stdClass);
+
+    expect($index->declarationAt('beam.particle.resources')?->root)->toBe('beam.particle.resources')
+        ->and($index->declarationAt('beam.particle.resources')?->arity)->toBe([RegistryArity::PickOne])
+        ->and($index->declarationAt('nothing.described.here'))->toBeNull();
+});
+
 it('refuses a second registry claiming one root, rather than recording a supersession', function () {
     $index = new RegistryIndex;
     $index->describe(store('beam.particle.resources'));
