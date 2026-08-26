@@ -56,13 +56,17 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
     of: 'every registry in the estate, keyed by the root of the keyspace it owns',
     arity: RegistryArity::PickOne,
     entryType: Registry::class,
-    onDuplicate: OnDuplicate::Reject,
+    onDuplicate: OnDuplicate::Supersede,
     optionality: Optionality::Required,
-    note: 'Roots must be unique: two registries claiming one root make that branch unroutable, so a '
-        .'duplicate is refused at describe time rather than recorded as a supersession.',
+    note: 'Roots must be unique, and a duplicate is RECORDED rather than fatal: the later describe() '
+        .'takes the root in the earlier one\'s slot and the displaced registry is readable through '
+        .'superseded(), carrying its registrant and sequence. That is strictly more information than a '
+        .'throw, which names two colliding packages and then dies before anything can enumerate the '
+        .'rest — and a root collision depends on which host loaded which providers, which is the one '
+        .'thing the estate has ruled must not be fatal at boot (registry-kernel 34, landed by 48).',
     order: 0,
 )]
-class RegistryIndex implements Forgettable, Gated, Nested, Registry
+class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, RecordsSupersession, Registry
 {
     /** @var BasicRegistry<Registry<mixed>> */
     private BasicRegistry $registries;
@@ -465,6 +469,37 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
     public function keys(): array
     {
         return $this->registries->keys();
+    }
+
+    /**
+     * {@see RecordsRegistrants} — which package or provider described the registry at this root.
+     *
+     * The index's own `by` is written by {@see describe()} on every call: the explicit `by:` argument
+     * where one is passed, otherwise the owner's class, otherwise the store's. So unlike the entry-level
+     * population ticket 29 D2 measured, this one is **never null** — the index is the one place the
+     * registrant vocabulary is already total (registry-kernel ticket 48).
+     */
+    public function registrantOf(RegistryKey|string $key): ?string
+    {
+        return $this->registries->registrantOf($key);
+    }
+
+    /** {@see RecordsRegistrants} — every root described by `$registrant`. */
+    public function keysBy(string $registrant): array
+    {
+        return $this->registries->keysBy($registrant);
+    }
+
+    /**
+     * {@see RecordsSupersession} — what was displaced at this root.
+     *
+     * Empty until something is displaced, and under registry-kernel ticket 48 the index CAN now displace:
+     * see the `onDuplicate` note on the class attribute for why a duplicate root became a recorded
+     * supersession rather than a boot-time throw.
+     */
+    public function superseded(RegistryKey|string $key): array
+    {
+        return $this->registries->superseded($key);
     }
 
     public function children(RegistryKey|string $key): array

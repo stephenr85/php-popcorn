@@ -134,12 +134,39 @@ it('reads a described registry\'s declaration off the LIVE registry, not off its
         ->and($index->declarationAt('nothing.described.here'))->toBeNull();
 });
 
-it('refuses a second registry claiming one root, rather than recording a supersession', function () {
+/**
+ * ⚠️ **Re-grounded, not deleted, by registry-kernel ticket 48** (34's decision). This used to assert
+ * `toThrow(DuplicateRegistryKey::class)` — *"refuses a second registry claiming one root, rather than
+ * recording a supersession."*
+ *
+ * Two arguments moved it. **`Superseded`'s own docblock advertised the recording as *"for free, how
+ * duplicate ROOTS are detected"*, which under `Reject` was false** — nothing is ever displaced, so
+ * `$index->superseded($root)` was permanently empty and tickets 05/20's designed audit finding did not
+ * exist. And **a root collision depends on which host loaded which providers**, which is exactly the
+ * class of condition the estate has ruled must not be fatal at boot.
+ *
+ * Detectability is *preserved* and fatality is traded: the record is always-on and carries `$by` and
+ * `$sequence`, which is strictly more than a throw that names two packages and then dies before
+ * anything can enumerate the rest.
+ */
+it('records a second registry claiming one root as a supersession, rather than dying at boot', function () {
     $index = new RegistryIndex;
-    $index->describe(store('beam.particle.resources'));
+    $first = store('beam.particle.resources')->register('invoices', 'from the first');
+    $second = store('beam.particle.resources')->register('invoices', 'from the second');
 
-    expect(fn () => $index->describe(store('beam.particle.resources')))
-        ->toThrow(DuplicateRegistryKey::class);
+    $index->describe($first, by: 'first-package');
+    $index->describe($second, by: 'second-package');
+
+    // The later describe() wins routing — and takes the earlier one's SLOT, per ticket 62.
+    expect($index->resolve('beam.particle.resources'))->toBe($second)
+        ->and($index->registrantOf('beam.particle.resources'))->toBe('second-package');
+
+    // And the displaced one is readable, with who put it there.
+    $displaced = $index->superseded('beam.particle.resources');
+
+    expect($displaced)->toHaveCount(1)
+        ->and($displaced[0]->entry)->toBe($first)
+        ->and($displaced[0]->by)->toBe('first-package');
 });
 
 // ---------------------------------------------------------------------------------------------

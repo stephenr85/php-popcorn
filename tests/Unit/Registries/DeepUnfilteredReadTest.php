@@ -300,3 +300,63 @@ it('leaves Nested branches alone — they are the same entry list, not a second 
         ->and($store->children('demo.resources'))->toHaveCount(2)
         ->and($store->unfiltered()->children('demo.resources'))->toHaveCount(2);
 });
+
+// ---------------------------------------------------------------------------------------------
+// 48 — the registrant read: `by` is written on every entry and was read by nothing
+// ---------------------------------------------------------------------------------------------
+
+it('reads back the registrant of a live entry, which no contract method could before', function () {
+    $store = gatedStore('demo.resources')->register('third', 'c', by: 'acme/package');
+
+    expect($store->registrantOf('demo.resources.third'))->toBe('acme/package')
+        ->and($store->registrantOf('demo.resources.open'))->toBeNull()      // legal, and the majority case today
+        ->and($store->registrantOf('demo.resources.nope'))->toBeNull();
+});
+
+it('selects every key a registrant wrote — forgetBy()\'s read twin, on the same exact match', function () {
+    $store = gatedStore('demo.resources')
+        ->register('a', 1, by: 'tower/conduit-hydrator')
+        ->register('b', 2, by: 'tower/conduit-hydrator')
+        ->register('c', 3, by: 'someone-else');
+
+    expect(array_map('strval', $store->keysBy('tower/conduit-hydrator')))
+        ->toBe(['demo.resources.a', 'demo.resources.b']);
+
+    // The twin agrees with the destructive half, which is the whole reason it matches exactly.
+    $store->forgetBy('tower/conduit-hydrator');
+
+    expect($store->keysBy('tower/conduit-hydrator'))->toBe([]);
+});
+
+it('filters both registrant reads, because an unfiltered one is an existence oracle', function () {
+    $store = gatedStore('demo.resources')->register('vault', 'v', by: 'acme/package', ability: 'read-vault');
+    $store->authorizeWith(denyEverything());
+
+    expect($store->registrantOf('demo.resources.vault'))->toBeNull()
+        ->and($store->keysBy('acme/package'))->toBe([])
+        ->and($store->unfiltered()->registrantOf('demo.resources.vault'))->toBe('acme/package')
+        ->and($store->unfiltered()->keysBy('acme/package'))->toHaveCount(1);
+});
+
+it('answers the FIRST registrant at an Admit key rather than throwing, unlike resolve()', function () {
+    $store = (new BasicRegistry(new IsRegistry(
+        root: 'demo.admit',
+        of: 'test entries',
+        arity: RegistryArity::RunAll,
+        onDuplicate: OnDuplicate::Admit,
+    )))
+        ->register('hook', 'first', by: 'package-a')
+        ->register('hook', 'second', by: 'package-b');
+
+    // "which entry" has no answer and throws; "who put something here" does, and it is who made the
+    // key exist.
+    expect($store->registrantOf('demo.admit.hook'))->toBe('package-a');
+});
+
+it('gives the index a total registrant vocabulary, unlike the entry-level population', function () {
+    $index = new RegistryIndex;
+    $index->describe(gatedStore('demo.resources'), by: 'acme/demo-package');
+
+    expect($index->registrantOf('demo.resources'))->toBe('acme/demo-package')
+        ->and(array_map('strval', $index->keysBy('acme/demo-package')))->toBe(['demo.resources']);
+});

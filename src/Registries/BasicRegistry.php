@@ -107,7 +107,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * constructor signature. Without it a level-8 run cannot prove the factory safe, and the estate has
  * no `final` to reach for.
  */
-class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, Nested, RecordsSupersession, Registry
+class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, Nested, RecordsRegistrants, RecordsSupersession, Registry
 {
     /**
      * Segments joined for use as a PHP array key. NUL is the separator because segments are opaque —
@@ -372,6 +372,43 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
         $keys = [];
 
         foreach ($this->visible($this->entries) as $record) {
+            $keys[$this->identity($record['segments'])] ??= $record['key'];
+        }
+
+        return array_values($keys);
+    }
+
+    /**
+     * {@see RecordsRegistrants} — the read side of the `$by` every {@see register()} already wrote
+     * (registry-kernel ticket 48).
+     *
+     * **Ambiguity is not thrown here, unlike {@see resolve()}, and the asymmetry is deliberate.** Under
+     * `Admit` several live entries may share a key; `resolve()` throws because "which entry" has no
+     * answer and a silent pick would let a duplicate registration survive to production. "Who put
+     * something here" has no such hazard — the honest answer is the FIRST registrant in registration
+     * order, which is who made the key exist. A caller that needs every registrant at one key walks
+     * `keysBy()` from the other direction, or reads {@see superseded()} for the dead ones.
+     */
+    public function registrantOf(RegistryKey|string $key): ?string
+    {
+        $visible = $this->visibleAt($this->door($key));
+
+        return $visible === [] ? null : $visible[0]['by'];
+    }
+
+    /**
+     * {@see RecordsRegistrants} — `forgetBy()`'s read twin, matched on the same exact string so the two
+     * can never disagree about what they select.
+     */
+    public function keysBy(string $registrant): array
+    {
+        $keys = [];
+
+        foreach ($this->visible($this->entries) as $record) {
+            if ($record['by'] !== $registrant) {
+                continue;
+            }
+
             $keys[$this->identity($record['segments'])] ??= $record['key'];
         }
 
