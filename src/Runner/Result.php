@@ -101,7 +101,16 @@ class Result
             return $this;
         }
 
-        throw $this->toException();
+        $exception = $this->toException();
+
+        // `toException()` is null for exactly one outcome, Success, and that one returned at the top
+        // of this method. The check is the type system asking to see the guarantee spelled out, not
+        // a doubt about the match — and a `?RunFailed` cannot be thrown without it.
+        if ($exception === null) {
+            return $this;
+        }
+
+        throw $exception;
     }
 
     public function throwIf(bool|callable $condition, ?callable $via = null): static

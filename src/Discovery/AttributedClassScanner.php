@@ -3,7 +3,6 @@
 namespace Rushing\Popcorn\Discovery;
 
 use ReflectionClass;
-use ReflectionException;
 use Symfony\Component\Finder\Finder;
 
 /**
@@ -72,11 +71,16 @@ class AttributedClassScanner
      */
     public function hasAttribute(string $class, string $attributeClass, bool $instanceof = true): bool
     {
-        try {
-            $reflection = new ReflectionClass($class);
-        } catch (ReflectionException) {
+        // The existence check is the guard, not a `catch (ReflectionException)`: `ReflectionClass`
+        // throws for exactly one reason here — the name does not resolve — so asking first says the
+        // same thing without a catch block PHPStan can prove is never entered. `class_exists()`
+        // alone is not that question: an interface or trait is a legal argument here and reports
+        // false to it, which is why all three are asked.
+        if (! class_exists($class) && ! interface_exists($class) && ! trait_exists($class)) {
             return false;
         }
+
+        $reflection = new ReflectionClass($class);
 
         $flags = $instanceof ? \ReflectionAttribute::IS_INSTANCEOF : 0;
 
@@ -135,7 +139,11 @@ class AttributedClassScanner
         return null;
     }
 
-    /** Whether the token at $index is a `::class` fetch rather than a real type keyword. */
+    /**
+     * Whether the token at $index is a `::class` fetch rather than a real type keyword.
+     *
+     * @param  list<array{int, string, int}|string>  $tokens  as `token_get_all()` returns them
+     */
     private static function precededByDoubleColon(array $tokens, int $index): bool
     {
         for ($j = $index - 1; $j >= 0; $j--) {
@@ -151,7 +159,11 @@ class AttributedClassScanner
         return false;
     }
 
-    /** The next real identifier after $index, skipping whitespace/comments — or null (e.g. anonymous class). */
+    /**
+     * The next real identifier after $index, skipping whitespace/comments — or null (e.g. anonymous class).
+     *
+     * @param  list<array{int, string, int}|string>  $tokens  as `token_get_all()` returns them
+     */
     private static function nextIdentifier(array $tokens, int $index): ?string
     {
         for ($j = $index; $j < count($tokens); $j++) {
@@ -167,7 +179,11 @@ class AttributedClassScanner
         return null;
     }
 
-    /** Read a (possibly qualified) name starting at $index, up to the terminating `;` or `{`. */
+    /**
+     * Read a (possibly qualified) name starting at $index, up to the terminating `;` or `{`.
+     *
+     * @param  list<array{int, string, int}|string>  $tokens  as `token_get_all()` returns them
+     */
     private static function readName(array $tokens, int $index): string
     {
         $name = '';

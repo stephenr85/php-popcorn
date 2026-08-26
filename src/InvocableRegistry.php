@@ -2,6 +2,7 @@
 
 namespace Rushing\Popcorn;
 
+use InvalidArgumentException;
 use Rushing\Popcorn\Contracts\Invocable;
 use Rushing\Popcorn\Registries\Authorizer;
 use Rushing\Popcorn\Registries\BasicRegistry;
@@ -55,6 +56,8 @@ use Rushing\Popcorn\Registries\RegistryNode;
  * So the two name-taking sugar methods translate an illegal name into an absent one. The CONTRACT
  * methods do not: `resolve()`, `has()` and the rest take a key, an illegal key is a programming error,
  * and softening them would put a guess back at the door.
+ *
+ * @implements Registry<Invocable>
  */
 #[IsRegistry(
     root: 'popcorn.invocables',
@@ -70,6 +73,7 @@ use Rushing\Popcorn\Registries\RegistryNode;
 )]
 class InvocableRegistry implements Forgettable, Gated, Nested, Registry
 {
+    /** @var BasicRegistry<Invocable> */
     private BasicRegistry $entries;
 
     public function __construct()
@@ -90,6 +94,20 @@ class InvocableRegistry implements Forgettable, Gated, Nested, Registry
         if ($key instanceof Invocable) {
             $entry = $key;
             $key = $key instanceof HasRegistryKey ? $key->registryKey() : $key->name();
+        }
+
+        // The widened first parameter makes `$entry` optional, and an optional entry defaults to null —
+        // which this registry DECLARES it cannot hold (`entryType: Invocable::class`). Found statically
+        // by the level-8 run once `Registry` carried `@template TEntry`: `register('name')` alone typed
+        // as writing `Invocable|null` into a `BasicRegistry<Invocable>`. Refused here rather than at
+        // pop time, where the failure is a null-method-call several frames from the mistake.
+        if (! $entry instanceof Invocable) {
+            throw new InvalidArgumentException(
+                'InvocableRegistry holds Invocables, so `register($key, $entry)` needs one: pass the '
+                    .'Invocable as the only argument to have it key itself, or as `$entry` under an '
+                    .'explicit key. Registering a name with no entry would store null under a key the '
+                    .'declaration says holds an Invocable.'
+            );
         }
 
         $this->entries->register($key, $entry, $by, $ability);

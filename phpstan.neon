@@ -4,6 +4,11 @@ includes:
 parameters:
     paths:
         - src/
+        # ANALYSED, not run. `tests/Static/` holds no test — it holds the kernel's own consumer of the
+        # `@template TEntry` generics it publishes, written so that the analysis fails if the generic
+        # stops flowing. The rest of `tests/` is deliberately absent: it would add 42 findings of
+        # test-fixture noise to a ratchet that exists to hold the CONTRACT (ticket 50).
+        - tests/Static/
 
     # The estate's six analysing hosts run larastan at level 7. This kernel is
     # framework-free (`mustNotRequire: illuminate/*`), so it takes plain phpstan —

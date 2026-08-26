@@ -58,6 +58,11 @@ class CachedRegistrar implements Registrar
         return new self($registrar, new ArrayRegistrarCache);
     }
 
+    /**
+     * @template TEntry
+     *
+     * @param  Registry<TEntry>  $registry
+     */
     public function fill(Registry $registry): void
     {
         $cached = $this->cache->get($this->source());

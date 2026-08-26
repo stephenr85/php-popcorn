@@ -1,3 +1,12 @@
+# Two entries, and they are the same finding: a trait the kernel PUBLISHES and its consumers use
+# from outside this repo. `ChainsTraitMethods` is exercised by `tests/` (not an analysed path);
+# `HandlesRunnerIo` is used by `rushing/laravel-popcorn-bubble`'s `BwrapRunner` and
+# `rushing/laravel-popcorn-wasm`'s `WasmtimeRunner` — checked live, 2026-08-26. `trait.unused` reads
+# "not analysed", not "dead": it is a MEASUREMENT gap at a package boundary, which is this ticket's
+# own thesis pointed back at itself, and no edit inside `src/` can close it.
+#
+# Everything else is gone. 38 → 21 (ticket 46) → 2 (ticket 50), by fixing contracts, not by widening.
+# A ratchet a feature can widen is not a ratchet.
 parameters:
 	ignoreErrors:
 		-
@@ -7,121 +16,7 @@ parameters:
 			path: src/Concerns/ChainsTraitMethods.php
 
 		-
-			message: '#^Parameter \#1 \$objectOrClass of class ReflectionClass constructor expects class\-string\<T of object\>\|T of object, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Concerns/TraitMethods.php
-
-		-
-			message: '#^Parameter \#2 \$collected of static method Rushing\\Popcorn\\Concerns\\TraitMethods\:\:collect\(\) expects array\<class\-string, class\-string\>, array\<string, string\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Concerns/TraitMethods.php
-
-		-
-			message: '#^Parameter &\$collected by\-ref type of method Rushing\\Popcorn\\Concerns\\TraitMethods\:\:collect\(\) expects array\<class\-string, class\-string\>, array\<string, string\> given\.$#'
-			identifier: parameterByRef.type
-			count: 1
-			path: src/Concerns/TraitMethods.php
-
-		-
-			message: '#^Dead catch \- ReflectionException is never thrown in the try block\.$#'
-			identifier: catch.neverThrown
-			count: 1
-			path: src/Discovery/AttributedClassScanner.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Discovery\\AttributedClassScanner\:\:nextIdentifier\(\) has parameter \$tokens with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Discovery/AttributedClassScanner.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Discovery\\AttributedClassScanner\:\:precededByDoubleColon\(\) has parameter \$tokens with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Discovery/AttributedClassScanner.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Discovery\\AttributedClassScanner\:\:readName\(\) has parameter \$tokens with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Discovery/AttributedClassScanner.php
-
-		-
-			message: '#^Method Rushing\\Popcorn\\Ladders\\Ladder\:\:climb\(\) has parameter \$input with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Ladders/Ladder.php
-
-		-
-			message: '#^Cannot call method allows\(\) on Rushing\\Popcorn\\Registries\\Authorizer\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$array \(list\<array\{key\: string, by\: string\|null\}\>\) of array_values is already a list, call has no effect\.$#'
-			identifier: arrayValues.list
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$array \(list\<mixed\>\) of array_values is already a list, call has no effect\.$#'
-			identifier: arrayValues.list
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Unsafe usage of new static\(\)\.$#'
-			identifier: new.static
-			count: 1
-			path: src/Registries/BasicRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$objectOrClass of class ReflectionClass constructor expects class\-string\<object\>\|object, object\|string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Registries/IsRegistry.php
-
-		-
-			message: '#^Parameter \#1 \$string of function substr expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Registries/Key.php
-
-		-
-			message: '#^Cannot call method scan\(\) on Rushing\\Popcorn\\Discovery\\AttributedClassScanner\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Registries/Registrars/AttributeRegistrar.php
-
-		-
-			message: '#^Parameter \#1 \$string of function substr expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Registries/Registrars/AttributeRegistrar.php
-
-		-
-			message: '#^Property Rushing\\Popcorn\\Registries\\RegistryIndex\:\:\$registries \(Rushing\\Popcorn\\Registries\\BasicRegistry\) does not accept Rushing\\Popcorn\\Registries\\Registry\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Registries/RegistryIndex.php
-
-		-
 			message: '#^Trait Rushing\\Popcorn\\Runner\\Concerns\\HandlesRunnerIo is used zero times and is not analysed\.$#'
 			identifier: trait.unused
 			count: 1
 			path: src/Runner/Concerns/HandlesRunnerIo.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>grant" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: src/Runner/Manifest.php
-
-		-
-			message: '#^Invalid type Rushing\\Popcorn\\Runner\\Exceptions\\RunFailed\|null to throw\.$#'
-			identifier: throw.notThrowable
-			count: 1
-			path: src/Runner/Result.php

@@ -136,7 +136,9 @@ class Manifest
     /** The requested grant, or the deny-all floor if the transform declared none. */
     public function requestedGrant(): Grant
     {
-        return $this->requests?->grant ?? Grant::none();
+        // `->` not `?->`: `??` already answers the null-property fetch, so the nullsafe was doing
+        // nothing but hiding that fact from the reader (and from PHPStan, which said so).
+        return $this->requests->grant ?? Grant::none();
     }
 
     /**

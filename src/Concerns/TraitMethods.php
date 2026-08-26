@@ -30,6 +30,7 @@ class TraitMethods
     /**
      * Every trait used by `$class`, its parents, and its traits' traits — declaration order, deduped.
      *
+     * @param  class-string|object  $class
      * @return list<class-string>
      */
     public static function using(string|object $class): array
@@ -64,6 +65,7 @@ class TraitMethods
      * `{chain}{TraitBasename}` for a trait the class uses — the Eloquent convention, honoured so an
      * existing trait joins unchanged. A convention-named link takes the default order.
      *
+     * @param  class-string|object  $class
      * @return list<ReflectionMethod> deduped by name, never two entries for one method
      */
     public static function in(string|object $class, string $chain): array
@@ -136,6 +138,7 @@ class TraitMethods
      * file and line can: a trait method's definition lives in the trait's file, which is the one honest
      * signal reflection offers without parsing.
      */
+    /** @param  class-string|object  $class */
     protected static function fromTrait(ReflectionMethod $method, string|object $class): bool
     {
         foreach (static::using($class) as $trait) {
@@ -154,6 +157,7 @@ class TraitMethods
     }
 
     /**
+     * @param  class-string  $trait
      * @param  array<class-string, class-string>  $collected
      */
     protected static function collect(string $trait, array &$collected): void

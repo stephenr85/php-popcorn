@@ -20,20 +20,26 @@ use Rushing\Popcorn\Registries\RegistryKey;
  * The key is recorded exactly as the registrar passed it — relative, unstamped. Replaying it through
  * `register()` on a real store sends it through the same door and gets the same stamping, so a cached
  * fill and a live one are indistinguishable at the far end (ticket 20 D2).
+ *
+ * @template TEntry
+ *
+ * @implements Registry<TEntry>
  */
 class RecordingRegistry implements Registry
 {
-    /** @var list<array{key: mixed, entry: mixed, by: string|null, ability: string|null}> */
+    /** @var list<array{key: RegistryKey|string, entry: TEntry, by: string|null, ability: string|null}> */
     private array $writes = [];
 
+    /** @param  Registry<TEntry>  $inner */
     public function __construct(private Registry $inner) {}
 
-    /** @return list<array{key: mixed, entry: mixed, by: string|null, ability: string|null}> */
+    /** @return list<array{key: RegistryKey|string, entry: TEntry, by: string|null, ability: string|null}> */
     public function writes(): array
     {
         return $this->writes;
     }
 
+    /** @param  TEntry  $entry */
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static
     {
         $this->writes[] = ['key' => $key, 'entry' => $entry, 'by' => $by, 'ability' => $ability];

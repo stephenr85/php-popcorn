@@ -64,6 +64,32 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * through {@see unfiltered()} rather than through a hidden special case. The authorizer itself is
  * installed once, on the index, not per registry: per-registry means a registry that forgets to wire it
  * is silently open (ticket 09 D7; the attachment point is ticket 20's).
+ *
+ * ## `TEntry` — what the runtime declaration cannot say, said to the type system
+ *
+ * {@see IsRegistry}'s `entryType` names what a registry holds, but an attribute argument is a string
+ * read at runtime: it cannot give `$registry->resolve('x')` a return type, because attributes and
+ * runtime methods do not participate in PHP's type system at all (registry-kernel ticket 34 D4). The
+ * docblock generic is the half that can, and the two are one fact from two sides — `entryType` for the
+ * index, the conformance audit and the doctor; `TEntry` for the IDE, the analyser and the call site.
+ *
+ * A port names the type once and every call site downstream of it is typed:
+ *
+ * ```php
+ * #[IsRegistry(root: 'beam.particle.resources', of: '…', entryType: ResourceDefinition::class)]
+ * interface ResourceRegistry extends Registry<ResourceDefinition> {}
+ *
+ * $registry->resolve('invoices');   // ResourceDefinition, not mixed
+ * $registry->matches('');           // list<ResourceDefinition>, not list<mixed>
+ * ```
+ *
+ * A registry that genuinely holds anything writes `Registry<mixed>` and loses nothing — which is most
+ * of the census, where `entryType` is `'mixed'` for the same reason.
+ *
+ * **A second interface to say this was refused.** `Typed` would be a third place the entry type is
+ * written, and a third place it can drift from the other two (ticket 07 D4 / 01 D10).
+ *
+ * @template TEntry
  */
 interface Registry
 {
@@ -84,6 +110,8 @@ interface Registry
      * What a duplicate key does is declared per registry via {@see OnDuplicate}, not chosen here — the
      * estate ships all three behaviours with argued docblocks.
      *
+     * @param  TEntry  $entry
+     *
      * @throws DuplicateRegistryKey under {@see OnDuplicate::Reject}
      */
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static;
@@ -93,6 +121,8 @@ interface Registry
 
     /**
      * The one entry at `$key`.
+     *
+     * @return TEntry
      *
      * @throws RegistryMiss no entry, or the registry is `Required` and empty, or the only entries are
      *                      hidden from this caller
@@ -110,6 +140,8 @@ interface Registry
      * "null-to-empty" Tower's `CapabilityResolutionError` exists to refuse. A silent null is how a
      * duplicate registration survives to production.
      *
+     * @return TEntry|null
+     *
      * @throws AmbiguousRegistryMatch
      */
     public function tryResolve(RegistryKey|string $key): mixed;
@@ -125,7 +157,7 @@ interface Registry
      * Superseded entries are never included. Arity is about live entries; supersession is history, and
      * conflating them is how a `RunAll` registry starts running dead entries (ticket 01 D9).
      *
-     * @return list<mixed>
+     * @return list<TEntry>
      */
     public function matches(RegistryKey|string $key): array;
 
@@ -143,6 +175,8 @@ interface Registry
      * Blunt on purpose. The rejected alternative was an implicit rule ("filter only when an actor is
      * present"), which makes the security-relevant behaviour depend on ambient state nobody can see at
      * the call site. Under the estate's stated trusted-shell policy this path is artisan-only.
+     *
+     * @return Registry<TEntry>
      */
     public function unfiltered(): Registry;
 }

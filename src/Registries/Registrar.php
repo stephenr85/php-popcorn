@@ -77,6 +77,11 @@ interface Registrar
      * (ticket 07 D13, 06 D11). A registrar is the one writer that always knows where its entry came
      * from, because reading from somewhere is its entire job.
      */
+    /**
+     * @template TEntry
+     *
+     * @param  Registry<TEntry>  $registry
+     */
     public function fill(Registry $registry): void;
 
     /**

@@ -45,6 +45,11 @@ class ConfigRegistrar implements Registrar
         private string $configKey,
     ) {}
 
+    /**
+     * @template TEntry
+     *
+     * @param  Registry<TEntry>  $registry
+     */
     public function fill(Registry $registry): void
     {
         foreach ($this->entries as $key => $entry) {

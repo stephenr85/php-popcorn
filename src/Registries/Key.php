@@ -118,7 +118,9 @@ class Key implements RegistryKey
      */
     public static function fromClass(string $class): self
     {
-        $short = str_contains($class, '\\') ? substr(strrchr($class, '\\'), 1) : $class;
+        $position = strrpos($class, '\\');
+
+        $short = $position === false ? $class : substr($class, $position + 1);
 
         $kebab = preg_replace('/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/', '-', $short);
 

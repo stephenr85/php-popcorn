@@ -50,6 +50,13 @@ use Rushing\Popcorn\Registries\Registry;
 class AttributeRegistrar implements Registrar
 {
     /**
+     * Never null after construction — the nullable argument is a DEFAULT, not a state. Held as a
+     * promoted nullable property it made every use site a null the type system could not discharge,
+     * and PHPStan said so (`Cannot call method scan() on AttributedClassScanner|null`).
+     */
+    private AttributedClassScanner $scanner;
+
+    /**
      * `$paths` are scanned for `$attribute`; non-existent paths are skipped silently. `$project` maps a
      * scanned class-string to the entry to register (identity by default). `$key` maps
      * `(class-string, entry)` to the key, and falls back to {@see HasRegistryKey} on the entry.
@@ -66,11 +73,16 @@ class AttributeRegistrar implements Registrar
         private $project = null,
         private $key = null,
         private bool $instanceof = true,
-        private ?AttributedClassScanner $scanner = null,
+        ?AttributedClassScanner $scanner = null,
     ) {
-        $this->scanner ??= new AttributedClassScanner;
+        $this->scanner = $scanner ?? new AttributedClassScanner;
     }
 
+    /**
+     * @template TEntry
+     *
+     * @param  Registry<TEntry>  $registry
+     */
     public function fill(Registry $registry): void
     {
         foreach ($this->scanner->scan($this->paths, $this->attribute, $this->instanceof) as $class) {
@@ -85,9 +97,9 @@ class AttributeRegistrar implements Registrar
 
     public function source(): string
     {
-        $short = str_contains($this->attribute, '\\')
-            ? substr(strrchr($this->attribute, '\\'), 1)
-            : $this->attribute;
+        $position = strrpos($this->attribute, '\\');
+
+        $short = $position === false ? $this->attribute : substr($this->attribute, $position + 1);
 
         return "#[{$short}] under ".($this->paths === [] ? '(no paths)' : implode(', ', $this->paths));
     }

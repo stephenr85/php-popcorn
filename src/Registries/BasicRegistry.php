@@ -85,6 +85,20 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * `keys()`, `matches()`, `children()` and `descendants()` therefore hand back ABSOLUTE keys — which is
  * what makes enumerate-then-resolve round-trip through {@see RegistryIndex}, where a relative key would
  * mean nothing without also knowing which registry it came from.
+ *
+ * @template TEntry
+ *
+ * @implements Registry<TEntry>
+ *
+ * The generic is {@see Registry}'s, carried through unchanged: a composed registry writes
+ * `BasicRegistry<ResourceDefinition>` on the field it holds and the sugar around it is typed for free.
+ *
+ * @phpstan-consistent-constructor
+ *
+ * The annotation states in the type system what the "not for extending" paragraph above states in
+ * prose: `for()` does `new static($declaration)`, so anything that DID subclass must keep the
+ * constructor signature. Without it a level-8 run cannot prove the factory safe, and the estate has
+ * no `final` to reach for.
  */
 class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupersession, Registry
 {
@@ -95,7 +109,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      */
     private const IDENTITY_SEPARATOR = "\x00";
 
-    /** @var list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}> */
+    /** @var list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}> */
     private array $entries = [];
 
     /** @var array<string, list<Superseded>> */
@@ -117,6 +131,8 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      * Throws rather than defaulting when the owner declares nothing: an undeclared registry is exactly
      * what the surgeon gate exists to catch, and silently inventing a root here would hide it from the
      * one mechanism that can see it.
+     *
+     * @param  class-string|object  $owner
      */
     public static function for(object|string $owner): static
     {
@@ -215,6 +231,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return $this->registrars;
     }
 
+    /** @param  TEntry  $entry */
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static
     {
         $key = $this->door($key);
@@ -305,7 +322,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
 
         usort($matched, fn (array $a, array $b) => $a['sequence'] <=> $b['sequence']);
 
-        return array_values(array_map(fn (array $record) => $record['entry'], $matched));
+        return array_map(fn (array $record) => $record['entry'], $matched);
     }
 
     public function keys(): array
@@ -319,7 +336,12 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return array_values($keys);
     }
 
-    public function unfiltered(): Registry
+    /**
+     * Narrowed to `static` rather than the interface's `Registry`: the clone IS a BasicRegistry, and
+     * saying so is what lets a field typed `BasicRegistry` hold the result — {@see RegistryIndex}
+     * does exactly that, and the widened return was the one thing making it a type error.
+     */
+    public function unfiltered(): static
     {
         $unfiltered = clone $this;
         $unfiltered->authorizer = null;
@@ -482,13 +504,13 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
         return implode(self::IDENTITY_SEPARATOR, $segments);
     }
 
-    /** @return array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}|null */
+    /** @return array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}|null */
     private function recordAt(RegistryKey $key): ?array
     {
         return $this->recordsAt($key)[0] ?? null;
     }
 
-    /** @return list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}> */
+    /** @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}> */
     private function recordsAt(RegistryKey $key): array
     {
         $segments = $key->segments();
@@ -502,7 +524,7 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      * Compares segment ARRAYS rather than re-parsing the rendered string, which is what lets a foreign
      * key type participate in the tree at all (ticket 11).
      *
-     * @return list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}>
+     * @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>
      */
     private function recordsUnder(RegistryKey $key): array
     {
@@ -523,43 +545,50 @@ class BasicRegistry implements Filled, Forgettable, Gated, Nested, RecordsSupers
      * what makes installing an authorizer incapable of narrowing an already-open surface (ticket 09 D2),
      * and why {@see Authorizer::allows()} can take a non-nullable ability.
      *
-     * @param  list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}>  $records
-     * @return list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}>
+     * @param  list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>  $records
+     * @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>
      */
     private function visible(array $records): array
     {
-        if ($this->authorizer === null) {
+        $authorizer = $this->authorizer;
+
+        if ($authorizer === null) {
             return $records;
         }
 
-        return array_values(array_filter($records, function (array $record) {
+        // Bound to a LOCAL, not read off `$this` inside the closure. Two reasons, and neither is
+        // cosmetic: a property read inside a closure cannot be narrowed (PHPStan reported
+        // `allows() on Authorizer|null` here), and one filter pass now runs against exactly one
+        // authorizer even if `authorizeWith()` swaps it mid-iteration — a half-filtered list is
+        // precisely the outcome the identical-filter rule exists to forbid.
+        return array_values(array_filter($records, function (array $record) use ($authorizer) {
             if ($record['ability'] === null) {
                 return true;
             }
 
-            return $this->authorizer->allows($record['ability'], $record['key']);
+            return $authorizer->allows($record['ability'], $record['key']);
         }));
     }
 
-    /** @return list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}> */
+    /** @return list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}> */
     private function visibleAt(RegistryKey $key): array
     {
         return $this->visible($this->recordsAt($key));
     }
 
     /**
-     * @param  list<array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}>  $records
+     * @param  list<array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}>  $records
      * @return list<array{key: string, by: string|null}>
      */
     private function candidates(array $records): array
     {
-        return array_values(array_map(
+        return array_map(
             fn (array $record) => ['key' => (string) $record['key'], 'by' => $record['by']],
             $records,
-        ));
+        );
     }
 
-    /** @param  array{key: RegistryKey, segments: list<string>, entry: mixed, by: string|null, ability: string|null, sequence: int}  $displaced */
+    /** @param  array{key: RegistryKey, segments: list<string>, entry: TEntry, by: string|null, ability: string|null, sequence: int}  $displaced */
     private function supersede(array $displaced): void
     {
         $this->superseded[$this->identity($displaced['segments'])][] = new Superseded(

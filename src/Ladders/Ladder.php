@@ -20,6 +20,7 @@ class Ladder
         $this->rungs = $rungs;
     }
 
+    /** @param  array<string, mixed>  $input  the same shape every {@see Rung::attempt()} receives */
     public function climb(array $input, float $acceptAbove = 0.0): ?RungResult
     {
         foreach ($this->rungs as $rung) {

@@ -43,6 +43,13 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
  * owner's own class where there is one — `ParticleResourceRegistry` with its caller-facing sugar, not
  * the `BasicRegistry` inside it. Callers reaching for a registry by name want the second; routing wants
  * the first.
+ *
+ * The index is itself a registry — of registries — so its generic is bound rather than declared:
+ * `Registry<Registry<mixed>>`, the type-system half of the `entryType: Registry::class` immediately
+ * below. The inner registries' own entry types are theirs to declare; the index does not know them and
+ * has no business claiming to.
+ *
+ * @implements Registry<Registry<mixed>>
  */
 #[IsRegistry(
     root: '',
@@ -57,6 +64,7 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
 )]
 class RegistryIndex implements Forgettable, Gated, Nested, Registry
 {
+    /** @var BasicRegistry<Registry<mixed>> */
     private BasicRegistry $registries;
 
     /** @var array<string, object> owner objects, keyed by their registry's rendered root */
@@ -90,6 +98,10 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      * tenant or conduit id, where `describe(…, by: $tenantId)` and `forgetBy($tenantId)` bracket a
      * hydration. Provenance is a selector for finding and explaining, never an authorization — nothing
      * here checks that the caller is the registrant (ticket 08 D8, ticket 41 D8).
+     *
+     * @template TStored
+     *
+     * @param  Registry<TStored>  $store
      *
      * @throws InvalidArgumentException the store can say what root it owns
      * @throws Exceptions\DuplicateRegistryKey another registry already claims that root
@@ -144,6 +156,11 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      * carried by the beam-side conformance audit instead (ticket 49), which reads the live index after
      * boot and sees exactly the state this check cannot.
      */
+    /**
+     * @template TStored
+     *
+     * @param  Registry<TStored>  $incoming
+     */
     private function assertUnshadowed(Registry $incoming, RegistryKey $root): void
     {
         $described = $this->registries->unfiltered();
@@ -155,7 +172,12 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
 
             $existing = $described->resolve($existingRoot);
 
-            if (! $existing instanceof Registry || $existing === $this) {
+            // No `instanceof Registry` guard: the index is declared `Registry<Registry<mixed>>`, so
+            // the type system now proves what that check used to assert at runtime. PHPStan said so
+            // (`instanceof.alwaysTrue`) the moment the generic landed — one dead branch retired by an
+            // annotation, which is the generic paying for itself inside the kernel before a consumer
+            // ever reads it.
+            if ($existing === $this) {
                 continue;
             }
 
@@ -174,6 +196,11 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      *
      * `$shallower` and `$deeper` are the two roots as the message needs them, rather than being re-derived
      * here: the caller already knows which of the pair is the outer one and passing it beats guessing.
+     */
+    /**
+     * @template TStored
+     *
+     * @param  Registry<TStored>  $holder
      */
     private function refuseShadowed(
         Registry $holder,
@@ -202,6 +229,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      * where it asked for an entry. `routeTo(Key::root())` still returns the index, because that is an
      * exact hit on a real declared root rather than a fallback.
      */
+    /** @return Registry<mixed>|null */
     public function routeTo(RegistryKey|string $key): ?Registry
     {
         $key = Key::of($key);
@@ -252,6 +280,8 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      * This is what `Popcorn::pop()` calls, and {@see UnregisteredRegistry} is deliberately NOT a
      * {@see Exceptions\RegistryMiss}: a key naming no registry and a key naming a registry with nothing
      * at it are different operator errors with different fixes.
+     *
+     * @return Registry<mixed>
      *
      * @throws UnregisteredRegistry
      */
@@ -579,6 +609,11 @@ class RegistryIndex implements Forgettable, Gated, Nested, Registry
      * owning class — so a composed registry is asked for what it is already holding. Anything else
      * declares the attribute on itself. The `instanceof` is on the kernel's own reference implementation
      * rather than on a consumer's type, which is why it does not need an interface to hide behind.
+     */
+    /**
+     * @template TStored
+     *
+     * @param  Registry<TStored>  $store
      */
     private function declarationOf(Registry $store, ?object $owner): IsRegistry
     {

@@ -177,6 +177,8 @@ class IsRegistry
      * never its implementers: a root is a branch of the keyspace with one owner, and letting a contract
      * hand the same root to every implementer would manufacture the root collision this attribute exists
      * to make detectable.
+     *
+     * @param  class-string|object  $class
      */
     public static function of(object|string $class): ?self
     {
@@ -199,6 +201,7 @@ class IsRegistry
      * answered by WHERE the attribute sits, not by what it says. The conformance audit's collision check
      * is that reader.
      *
+     * @param  class-string|object  $class
      * @return class-string|null
      */
     public static function declaredOn(object|string $class): ?string
