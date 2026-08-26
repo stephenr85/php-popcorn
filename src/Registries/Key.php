@@ -53,7 +53,7 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  * key. {@see isUnder()} and {@see parent()} serve enumeration and longest-prefix routing, which walk
  * SEGMENTS, never characters — `beam.realms` is not under `beam.realm`.
  */
-class Key implements RegistryKey
+class Key implements Rootable
 {
     /**
      * One segment: lowercase alphanumeric groups joined by `-`, `_` or `:`. A joiner may never lead,
@@ -161,6 +161,29 @@ class Key implements RegistryKey
     public function equals(RegistryKey $other): bool
     {
         return $this->segments === $other->segments();
+    }
+
+    /**
+     * The stamping rule, and the ONLY copy of it — {@see RelativeUriKey} delegates here rather than
+     * restating it, and {@see BasicRegistry::door()} no longer holds one at all.
+     *
+     * Deliberately two-sided rather than a heuristic: a key **under or equal to** the root is already
+     * absolute and passes through untouched; anything else is relative and gets the root joined onto its
+     * front. Equality counts as absolute because that is the reading the index would have sent — a
+     * registry rooted at `beam.realm` asked for `beam.realm` is being asked about its own branch, not
+     * about a child called `beam.realm`.
+     *
+     * A zero-segment root ({@see root()}, which only {@see RegistryIndex} declares) needs no special
+     * case: everything is under the root of the whole tree, so the general rule already returns the key
+     * untouched.
+     */
+    public function underRoot(Key $root): RegistryKey
+    {
+        if ($this->equals($root) || $this->isUnder($root)) {
+            return $this;
+        }
+
+        return static::fromSegments([...$root->segments(), ...$this->segments]);
     }
 
     /** The key one segment shallower, or null at the root. */

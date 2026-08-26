@@ -175,38 +175,41 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
     }
 
     /**
-     * Every key argument's one entrance: coerce the union, then stamp the declared root onto a key that
-     * is not already under it.
+     * Every key argument's one entrance: coerce the union, then let the key root itself under the
+     * declared root.
      *
-     * The rule is deliberately two-sided rather than a heuristic: a key **under or equal to** the root
-     * is already absolute and passes through untouched; anything else is relative and gets the root
-     * joined onto its front. Equality counts as absolute because that is the reading the index would
-     * have sent — a registry rooted at `beam.realm` asked for `beam.realm` is being asked about its own
-     * branch, not about a child called `beam.realm`.
+     * ## The door no longer holds the rule, and it no longer holds a class check
      *
-     * Two cases pass through unstamped, and neither is an exception to the rule:
+     * It used to ask `! $key instanceof Key` — the concrete canonical class — justified by *"the kernel
+     * cannot construct a consumer's key type."* Those are two different rules, and registry-kernel
+     * ticket 58 D3 measured what the gap cost: the check encoded **canonical** where the intent was
+     * **constructible**, so a type the KERNEL ships would have been treated as a stranger's, and the
+     * whole consequence chain that made archetype **f** expensive (never root-stamped → `matches(root)`
+     * returns nothing → every enumeration rebuilds onto `keys()` → `ExistsInRegistry` hard-refuses)
+     * turned out to be an artifact of that one `instanceof` rather than a property of non-dotted keys.
      *
-     * - **A zero-segment root** — {@see RegistryIndex}'s. Everything is under the root of the tree, so
-     *   the general rule already returns the key untouched; there is no special case here to find.
-     * - **A foreign {@see RegistryKey}.** Stamping means constructing a key of the same type with extra
-     *   segments on the front, and the kernel cannot construct a consumer's key type — `schemastud/
-     *   laravel-json-ns` keys by namespace URI, where URI-is-identity is the package's whole thesis, and
-     *   a URI's `:` and `/` would fail {@see Key::SEGMENT_PATTERN} on the way to a `Key` anyway. So a
-     *   foreign-keyed registry is relative-forever and its entries are NOT addressable through the
-     *   global keyspace — reachable only as a registry, through the index, never through `pop()`. That
-     *   is the same line ticket 13 drew when `ExistsInRegistry` hard-refuses a foreign-keyed registry,
-     *   arrived at from the other end.
+     * The replacement is a property of the KEY, {@see Rootable}, not a list here — a list is the thing
+     * the next kernel key type forgets to join, and nothing would report it (ticket 64). Three
+     * consequences, none of them special cases:
+     *
+     * - {@see Key} and {@see RelativeUriKey} stamp. The latter hands back a `Key`, because the wire
+     *   keeps its slashes and the kernel stores an address.
+     * - {@see AbsoluteUriKey} implements the interface and DECLINES, returning itself, because stamping
+     *   a dotted root onto one opaque URI segment means nothing. Declining in a type that could is not
+     *   the same as being unable to, and only the interface makes that difference legible.
+     * - **A consumer's own {@see RegistryKey} does not implement it**, so it is relative-forever and its
+     *   entries are not addressable through the global keyspace — reachable as a registry, through the
+     *   index, never through `pop()`. That is ticket 20 D3 and ticket 13's `ExistsInRegistry` refusal,
+     *   both still standing, now narrowed from *foreign-keyed* to *a key type the kernel cannot address*.
+     *   The widening is opt-in by construction: nothing a consumer already shipped changed behaviour.
      */
     private function door(RegistryKey|string $key): RegistryKey
     {
         $key = Key::of($key);
-        $root = $this->declaration->rootKey();
 
-        if (! $key instanceof Key || $key->equals($root) || $key->isUnder($root)) {
-            return $key;
-        }
-
-        return Key::fromSegments([...$root->segments(), ...$key->segments()]);
+        return $key instanceof Rootable
+            ? $key->underRoot($this->declaration->rootKey())
+            : $key;
     }
 
     /**

@@ -222,12 +222,16 @@ class IsRegistry
     /**
      * The declared root as a parsed key. Throws {@see Exceptions\InvalidRegistryKey} if it is not one.
      *
+     * Typed to the concrete {@see Key} rather than {@see RegistryKey}: a root is always written as a
+     * dotted string in an attribute, so it has only ever been a `Key`, and {@see Rootable::underRoot()}
+     * needs to be able to say so (registry-kernel ticket 64).
+     *
      * The empty string is the one legal non-key here, and it means the ROOT of the whole tree — see
      * {@see Key::root()}. Only {@see RegistryIndex} declares it, because only the index owns the whole
      * keyspace rather than a branch of it. It is spelled out here rather than in `Key::parse()` so
      * that an empty string arriving from anywhere ELSE still throws (ticket 20).
      */
-    public function rootKey(): RegistryKey
+    public function rootKey(): Key
     {
         return $this->root === '' ? Key::root() : Key::parse($this->root);
     }
