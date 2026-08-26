@@ -30,6 +30,8 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * - **No `children()` / `descendants()`** — they live on {@see Nested} (ticket 05).
  * - **No miss policy.** `resolve()` throws and `tryResolve()` returns null; the estate's live split is
  *   deliberate on both sides, and the method pair honours it without a flag (ticket 01 D7, 06 D7).
+ *   **Which half a host reaches for is a rule, not a taste** — it turns on where the key came from,
+ *   and it is written on {@see tryResolve()} (ticket 61).
  * - **No `rank`, `priority` or `order` field.** Registration order IS the ordering key, and
  *   {@see matches()} guarantees it (ticket 08 D4).
  * - **No merge.** `entryType` is `'mixed'` across most of the census, so a kernel that merged would
@@ -139,6 +141,36 @@ interface Registry
      * handling that; ambiguity is a question with several, and answering `null` would be precisely the
      * "null-to-empty" Tower's `CapabilityResolutionError` exists to refuse. A silent null is how a
      * duplicate registration survives to production.
+     *
+     * ## Which half a host reaches for — the rule, not a preference (ticket 61)
+     *
+     * **A key the CODE chose is a `resolve()`. A key that came from OUTSIDE is a `tryResolve()`.**
+     * The split is about where the key came from, never about how the caller feels about exceptions.
+     * A literal, a config value, an enum case — the code asserted that entry exists, so a miss is a
+     * wiring bug and should be loud. A URL segment, a query parameter, a request body field, a stored
+     * user selection — those can always miss, an escaping {@see RegistryMiss} is a 500, and the honest
+     * answer is the host's own 404.
+     *
+     * Two things a request-facing caller must handle that a `resolve()` caller never sees:
+     *
+     * - **A string that is not a key at all.** `Key::parse()` throws {@see Exceptions\InvalidRegistryKey}
+     *   BEFORE any miss is considered — uppercase is rejected rather than folded, `/` is not a key
+     *   character. That is right at a declaration site and wrong on a URL segment, where "not a legal
+     *   key" and "no such key" are the same 404. Gate with `Key::tryParse()` first; never relax the
+     *   parser to make the caller's life easier.
+     * - **Ambiguity still throws, on purpose.** Two entries answering one user-supplied key is a
+     *   duplicate registration, not a bad request.
+     *
+     * ## A port that wraps this must carry the PAIR across
+     *
+     * A registry keeping its own vocabulary over the kernel (`get()`, `for()`, `definition()`) must
+     * publish both halves — the throwing accessor over `resolve()` AND its nullable twin over
+     * `tryResolve()`, on Laravel's `findOrFail()`/`find()` split. Publishing only the throwing half
+     * leaves a host either catching a kernel exception it never imported or paying a
+     * `has()`-then-`get()` double lookup, and it is how ticket 38's sweep turned two asserted 404s in
+     * the flagship into 500s: the port's miss changed type under a host's `catch`, and no nullable
+     * accessor existed to move to. Whichever half the port already had keeps its behaviour; the
+     * migration ADDS the missing one, it never re-points the existing one.
      *
      * @return TEntry|null
      *
