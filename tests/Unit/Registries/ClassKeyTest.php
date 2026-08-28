@@ -1,8 +1,8 @@
 <?php
 
 use Rushing\Popcorn\Registries\BasicRegistry;
-use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 use Rushing\Popcorn\Registries\ClassKey;
+use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\OnDuplicate;
