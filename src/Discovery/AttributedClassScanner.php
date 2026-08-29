@@ -64,12 +64,32 @@ class AttributedClassScanner
             return [];
         }
 
+        // ⚠️ A FILE and a DIRECTORY take different routes, and the class docblock has claimed since it
+        // was written that both are accepted. Only directories were: `Finder::in()` raises
+        // `DirectoryNotFoundException` on a plain file path, so a caller who took the docblock at its
+        // word got a fatal rather than a scan. Measured 2026-08-29, handing it one `*.php` path.
+        //
+        // Files are what a caller reaches for when it needs a directory MINUS one subtree — the
+        // scanner recurses, so "this directory but not that one" can only be spelled as the siblings
+        // plus the loose files. Splitting here is what makes that expressible.
+        $files = array_values(array_filter($existing, 'is_file'));
+        $directories = array_values(array_filter($existing, 'is_dir'));
+
+        $realPaths = array_map(
+            fn (string $file): string => realpath($file) ?: $file,
+            array_filter($files, fn (string $file): bool => str_ends_with($file, '.php')),
+        );
+
+        if ($directories !== []) {
+            foreach ((new Finder)->files()->name('*.php')->in($directories) as $file) {
+                $realPaths[] = $file->getRealPath();
+            }
+        }
+
         $found = [];
 
-        $finder = (new Finder)->files()->name('*.php')->in($existing);
-
-        foreach ($finder as $file) {
-            $class = $this->classNameFromFile($file->getRealPath());
+        foreach (array_unique($realPaths) as $realPath) {
+            $class = $this->classNameFromFile($realPath);
 
             if ($class === null || ! class_exists($class)) {
                 continue;

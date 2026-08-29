@@ -69,3 +69,24 @@ it('enumerates every loadable class under a path, unfiltered', function () use (
 it('returns empty from classesIn when no path exists', function () {
     expect((new AttributedClassScanner)->classesIn(['/no/such/dir']))->toBe([]);
 });
+
+it('accepts an individual FILE path, not only a directory', function () use ($path) {
+    // The class docblock has always said "files or directories"; only directories worked, because
+    // `Finder::in()` raises DirectoryNotFoundException on a plain file path. A caller needing
+    // "this directory MINUS one subtree" can only express it as the sibling dirs plus the loose
+    // files, so a file path has to be a first-class argument rather than a fatal.
+    $found = (new AttributedClassScanner)->scan([$path.'/Annotated.php'], ScanMarker::class);
+
+    expect($found)->toBe([Annotated::class]);
+});
+
+it('mixes file and directory paths in one scan without double-counting', function () use ($path) {
+    $found = (new AttributedClassScanner)->classesIn([$path, $path.'/Annotated.php']);
+
+    expect(array_count_values($found)[Annotated::class])->toBe(1)
+        ->and($found)->toContain(Plain::class);
+});
+
+it('ignores a non-php file handed to it directly', function () {
+    expect((new AttributedClassScanner)->classesIn([__FILE__.'.nope']))->toBe([]);
+});
