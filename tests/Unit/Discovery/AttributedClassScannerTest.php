@@ -90,3 +90,32 @@ it('mixes file and directory paths in one scan without double-counting', functio
 it('ignores a non-php file handed to it directly', function () {
     expect((new AttributedClassScanner)->classesIn([__FILE__.'.nope']))->toBe([]);
 });
+
+it('skips a class whose autoload raises, instead of dying on it', function () {
+    // `class_exists()` AUTOLOADS, and a class whose parent is absent raises `Error` rather than
+    // returning false. The docblock has always promised that an unloadable class is skipped; it was
+    // not, and one such file inside a scanned package `src/` killed the whole walk. Measured at
+    // `~/Herd/splicewire-app`: `laravel-prism-plus`'s `src/Testing/RerankProviderConformanceTest`
+    // extends `Orchestra\Testbench\TestCase`, a require-dev absent at every host.
+    $scanner = new AttributedClassScanner;
+
+    expect($scanner->classesIn([__DIR__.'/Fixtures/unloadable']))->toBe([]);
+});
+
+it('RECORDS what it could not load, so a caller can report its own partial blindness', function () {
+    // Swallowing silently would hand back a short list indistinguishable from a complete one — the
+    // estate's signature defect, inside the instrument other checks are built on.
+    $scanner = new AttributedClassScanner;
+    $scanner->classesIn([__DIR__.'/Fixtures/unloadable']);
+
+    expect(array_keys($scanner->unloadable()))
+        ->toBe(['Rushing\Popcorn\Tests\Unit\Discovery\Fixtures\Unloadable\ExtendsMissingParent']);
+});
+
+it('resets the unloadable record per walk rather than accumulating across two', function () {
+    $scanner = new AttributedClassScanner;
+    $scanner->classesIn([__DIR__.'/Fixtures/unloadable']);
+    $scanner->classesIn([__DIR__.'/Fixtures/classes']);
+
+    expect($scanner->unloadable())->toBe([]);
+});

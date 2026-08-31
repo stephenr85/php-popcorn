@@ -27,6 +27,28 @@ use Symfony\Component\Finder\Finder;
 class AttributedClassScanner
 {
     /**
+     * Classes met during the last {@see classesIn()} walk whose autoload raised, keyed by class-string
+     * with the raising message as the value.
+     *
+     * A scanner that silently drops what it could not load hands back a short list indistinguishable
+     * from a complete one — this estate's signature defect, inside the instrument other checks are built
+     * on. Callers that report coverage read this and say so; the population is normally empty.
+     *
+     * @var array<class-string, string>
+     */
+    private array $unloadable = [];
+
+    /**
+     * What the last {@see classesIn()} walk could not load, keyed by class-string.
+     *
+     * @return array<class-string, string>
+     */
+    public function unloadable(): array
+    {
+        return $this->unloadable;
+    }
+
+    /**
      * Scan the given filesystem paths and return the class-strings carrying $attributeClass.
      *
      * @param  array<int, string>  $paths  filesystem paths (files or directories) to scan
@@ -58,6 +80,9 @@ class AttributedClassScanner
      */
     public function classesIn(array $paths): array
     {
+        // Reset per walk, so `unloadable()` describes THIS scan and never accumulates across two.
+        $this->unloadable = [];
+
         $existing = array_filter($paths, 'file_exists');
 
         if ($existing === []) {
@@ -91,7 +116,28 @@ class AttributedClassScanner
         foreach (array_unique($realPaths) as $realPath) {
             $class = $this->classNameFromFile($realPath);
 
-            if ($class === null || ! class_exists($class)) {
+            if ($class === null) {
+                continue;
+            }
+
+            // ⚠️ `class_exists()` AUTOLOADS, and autoloading a class whose parent is not installed
+            // raises `Error`, not `false`. This docblock has promised since it was written that a class
+            // which is "not loadable" is skipped, and until registry-kernel 73 §1's audit it was not:
+            // the scanner died instead. Measured 2026-08-31 at `~/Herd/splicewire-app` —
+            // `rushing/laravel-prism-plus`'s `src/Testing/RerankProviderConformanceTest` extends
+            // `Orchestra\Testbench\TestCase`, which is a `require-dev` of that package and absent at a
+            // host, so scanning a family package's `src/` fataled the whole audit on one file.
+            //
+            // Swallowed and RECORDED rather than swallowed silently: a scanner that skips what it could
+            // not load and says nothing hands its caller a short list that reads like a complete one.
+            // {@see unloadable()} is how a caller reports its own partial blindness.
+            try {
+                if (! class_exists($class)) {
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                $this->unloadable[$class] = $e->getMessage();
+
                 continue;
             }
 
