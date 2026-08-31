@@ -177,3 +177,33 @@ it('lets a hand describe supersede a pending bake for the same root, without res
         ->and($index->routeTo('lazy.demo.one'))->toBe($byHand)
         ->and(LazyRegistry::$constructions)->toBe(1);
 });
+
+it('RECORDS a baked root it cannot resolve here, instead of taking the whole index down', function () {
+    // The bake reads declarations off the filesystem, and a declaration's container binding often lives
+    // in a different package's provider — measured as the normal case, not the exception. An environment
+    // that composes the declaring package without the binding one meets a class it cannot build, and
+    // that is a COMPOSITION fact, which this estate's rule says must not be fatal.
+    $index = new RegistryIndex;
+    $index->resolveLazilyWith(function (string $class) {
+        throw new RuntimeException('Unresolvable dependency resolving [$roots]');
+    });
+    $index->describeLazily('lazy.demo', LazyRegistry::class, by: 'bake');
+
+    // An honest miss, not an exception, and the reason is readable rather than swallowed.
+    expect($index->routeTo('lazy.demo.one'))->toBeNull()
+        ->and($index->unresolvable())->toHaveKey('lazy.demo')
+        ->and($index->unresolvable()['lazy.demo'])->toContain('Unresolvable dependency');
+});
+
+it('still refuses a baked class that is simply not a Registry, because that is the AUTHOR\'s error', function () {
+    // The two failures are different in kind and must not be collapsed. "I cannot build this here" is a
+    // fact about the host; "this class does not implement the contract" is a fact the declaration's
+    // author could have gotten right without knowing any host — so the first records and the second
+    // throws, which is the same line this ticket drew for shadowing in §1.
+    $index = new RegistryIndex;
+    $index->describeLazily('lazy.broken', NotARegistry::class, by: 'bake');
+
+    expect(fn () => $index->routeTo('lazy.broken.anything'))
+        ->toThrow(InvalidArgumentException::class, 'does not implement')
+        ->and($index->unresolvable())->toBe([]);
+});

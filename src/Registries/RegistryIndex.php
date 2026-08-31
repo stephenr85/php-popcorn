@@ -153,6 +153,14 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     private ?string $unbaked = null;
 
     /**
+     * Baked roots whose class could not be resolved in THIS composition, keyed by root, with the
+     * resolver's message. See {@see hydrate()} for why this is a record and not a throw.
+     *
+     * @var array<string, string>
+     */
+    private array $unresolvable = [];
+
+    /**
      * Whether this index is a deep-unfiltered view: the registries it hands back are unfiltered too.
      * Set only by {@see unfiltered()}, never by a host — see that method for why it is not a one-level
      * escape (registry-kernel ticket 45).
@@ -290,6 +298,16 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
         return $this;
     }
 
+    /**
+     * Baked roots this composition could not build, keyed by root — normally empty.
+     *
+     * @return array<string, string>
+     */
+    public function unresolvable(): array
+    {
+        return $this->unresolvable;
+    }
+
     /** Whether a membership list was expected here and is absent. */
     public function isUnbaked(): bool
     {
@@ -346,7 +364,30 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
         // and recurse forever. The estate has constructor-seeded registries, so this is not theoretical.
         unset($this->pending[$root], $this->pendingBy[$root]);
 
-        $instance = $this->resolver === null ? new $class : ($this->resolver)($class);
+        try {
+            $instance = $this->resolver === null ? new $class : ($this->resolver)($class);
+        } catch (\Throwable $e) {
+            // ⚠️ A baked root whose class cannot be RESOLVED here is a composition fact, not a defect,
+            // and this estate's standing rule is that a composition fact must not be fatal.
+            //
+            // The bake reads DECLARATIONS off the filesystem, and a declaration's container binding
+            // frequently lives in a different package's provider — measured across this ticket as the
+            // normal case rather than the exception. So an environment that composes the declaring
+            // package without the binding one finds a class it cannot build. Measured 2026-08-31:
+            // `Splicewire\Beam\Doctor\Support\FacadeConformanceScope` declares
+            // `beam.doctor.facade-scope` and takes a required `array $roots`, so every package
+            // testbench that vendors beam's source but does not register `BeamServiceProvider` hit
+            // `Unresolvable dependency` — six suites, none of them wrong.
+            //
+            // RECORDED rather than swallowed, on the same reasoning as `Shadowed` and the scanner's
+            // `unloadable()`: a root that quietly disappears is exactly what this ticket exists to
+            // remove. It stays out of the index, `routeTo()` reports an honest miss, and
+            // `UnindexedRegistryAudit` sees it as unindexed — which at a host that SHOULD compose it is
+            // a real finding, and at one that should not is the correct answer.
+            $this->unresolvable[$root] = $e->getMessage();
+
+            return;
+        }
 
         if ($instance instanceof Registry) {
             $this->describe($instance, by: $by);
@@ -545,7 +586,12 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
 
         $this->hydrate((string) $best);
 
-        return $this->reveal($this->registries->unfiltered()->resolve($best));
+        // `tryResolve`, not `resolve`: hydration can decline. A baked root whose class this composition
+        // cannot build is recorded by {@see hydrate()} and never registered, so the honest answer here
+        // is the same null a genuinely unclaimed key gets — the reason is in {@see unresolvable()}.
+        $store = $this->registries->unfiltered()->tryResolve($best);
+
+        return $store === null ? null : $this->reveal($store);
     }
 
     /**
