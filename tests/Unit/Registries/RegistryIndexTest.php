@@ -5,7 +5,6 @@ use Rushing\Popcorn\Registries\BasicRegistry;
 use Rushing\Popcorn\Registries\Exceptions\AmbiguousRegistryMatch;
 use Rushing\Popcorn\Registries\Exceptions\DuplicateRegistryKey;
 use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
-use Rushing\Popcorn\Registries\Exceptions\ShadowedRegistryKey;
 use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
 use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\IsRegistry;
@@ -432,54 +431,106 @@ it('admits a root nested inside another, because longest-prefix routing is what 
         ->and($index->routeTo('beam.particle.fragments.ops.download'))->toBe($ops);
 });
 
-it('refuses a deeper root that would shadow an entry the shallower registry already holds', function () {
+it('RECORDS a deeper root that shadows an entry the shallower registry already holds, and does not throw', function () {
     $index = new RegistryIndex;
     $particle = store('beam.particle')->register('fragments.ops.download', 'reachable, for now');
 
     $index->describe($particle);
 
-    expect(fn () => $index->describe(store('beam.particle.fragments.ops')))
-        ->toThrow(ShadowedRegistryKey::class);
+    // Ticket 73 §1: this used to throw ShadowedRegistryKey. Whether two described registries overlap is
+    // a fact about which providers THIS host loaded, so it is an advisory finding and never a boot
+    // failure. This assertion fails against the throwing version.
+    $index->describe(store('beam.particle.fragments.ops'));
 
-    // Refused rather than recorded: the entry is still readable through the door it was written at.
-    expect($index->routeTo('beam.particle.fragments.ops.download'))->toBe($particle);
+    $records = $index->shadowed();
+
+    expect($records)->toHaveCount(1)
+        ->and((string) $records[0]->key)->toBe('beam.particle.fragments.ops.download')
+        ->and((string) $records[0]->shallower)->toBe('beam.particle')
+        ->and((string) $records[0]->deeper)->toBe('beam.particle.fragments.ops')
+        ->and($records[0]->sequence)->toBe(0);
+
+    // And the overlap is real rather than theoretical: the index now routes that address to the deeper
+    // registry, while the shallower one goes on answering for it. That disagreement is the whole finding.
+    expect($index->routeTo('beam.particle.fragments.ops.download'))->not->toBe($particle)
+        ->and($particle->has('fragments.ops.download'))->toBeTrue();
 });
 
-it('refuses the same collision described in the other order', function () {
+it('records the same collision described in the other order', function () {
     $index = new RegistryIndex;
     $index->describe(store('beam.particle.fragments.ops'));
 
     // Now the SHALLOWER registry arrives, already carrying the key the deeper root owns. Same defect,
     // opposite arrival order — a registry may be described before or after the one it nests with.
-    expect(fn () => $index->describe(store('beam.particle')->register('fragments.ops.download', 'x')))
-        ->toThrow(ShadowedRegistryKey::class);
-});
-
-it('names both roots and the entry that would have gone dark', function () {
-    $index = new RegistryIndex;
     $index->describe(store('beam.particle')->register('fragments.ops.download', 'x'));
 
-    try {
-        $index->describe(store('beam.particle.fragments.ops'));
-    } catch (ShadowedRegistryKey $shadowed) {
-        expect($shadowed->key)->toBe('beam.particle.fragments.ops.download')
-            ->and($shadowed->shallower)->toBe('beam.particle')
-            ->and($shadowed->deeper)->toBe('beam.particle.fragments.ops')
-            ->and($shadowed->getMessage())->toContain('two answers');
+    $records = $index->shadowed();
 
-        return;
-    }
+    expect($records)->toHaveCount(1)
+        ->and((string) $records[0]->shallower)->toBe('beam.particle')
+        ->and((string) $records[0]->deeper)->toBe('beam.particle.fragments.ops');
+});
 
-    $this->fail('describing a shadowing root should have thrown');
+it('carries the registrant of the describe that created the overlap', function () {
+    $index = new RegistryIndex;
+    $index->describe(store('beam.particle')->register('fragments.ops.download', 'x'), by: 'first-package');
+    $index->describe(store('beam.particle.fragments.ops'), by: 'second-package');
+
+    // `$by` names who described the registry whose ARRIVAL created the overlap — the actionable half,
+    // since the other root was already there and legal on its own.
+    expect($index->shadowed()[0]->by)->toBe('second-package');
+});
+
+it('records EVERY shadowed entry, not just the first one it meets', function () {
+    $index = new RegistryIndex;
+    $index->describe(
+        store('beam.particle')
+            ->register('fragments.ops.download', 'a')
+            ->register('fragments.ops.upload', 'b')
+            ->register('fragments.kept', 'c'),
+    );
+
+    $index->describe(store('beam.particle.fragments.ops'));
+
+    // The throwing version stopped at the first, because it was dying anyway. A report that names one of
+    // two and stops reproduces the complaint that retired the throw.
+    expect(array_map(fn ($s) => (string) $s->key, $index->shadowed()))
+        ->toBe(['beam.particle.fragments.ops.download', 'beam.particle.fragments.ops.upload']);
+});
+
+it('filters shadow records by either end of the overlap', function () {
+    $index = new RegistryIndex;
+    $index->describe(store('beam.particle')->register('fragments.ops.download', 'x'));
+    $index->describe(store('beam.particle.fragments.ops'));
+
+    // "what did my registry shadow" and "what shadowed my registry" are one question asked from the two
+    // doors, so a caller holding one root need not know which end it is on.
+    expect($index->shadowed('beam.particle'))->toHaveCount(1)
+        ->and($index->shadowed('beam.particle.fragments.ops'))->toHaveCount(1)
+        ->and($index->shadowed('beam.realm'))->toBe([]);
+});
+
+it('drops a shadow record when either of its two roots is forgotten', function () {
+    $index = new RegistryIndex;
+    $index->describe(store('beam.particle')->register('fragments.ops.download', 'x'));
+    $index->describe(store('beam.particle.fragments.ops'));
+
+    expect($index->shadowed())->toHaveCount(1);
+
+    $index->forget('beam.particle.fragments.ops');
+
+    // The overlap is gone, so the record must go with it: a record outliving its condition reports
+    // something a reader can no longer see in the index, which reads as the reader being broken.
+    expect($index->shadowed())->toBe([]);
 });
 
 it('does not treat its own zero-segment root as a shadow of everything', function () {
     // The index is a prefix of every key in the estate and its entries are ROOTS rather than entry
-    // keys, so a naive check would refuse every registry there is, on a category error.
+    // keys, so a naive check would report every registry there is, on a category error.
     $index = new RegistryIndex;
+    $index->describe(store('beam.particle')->register('fragments', 'x'));
 
-    expect(fn () => $index->describe(store('beam.particle')->register('fragments', 'x')))
-        ->not->toThrow(ShadowedRegistryKey::class);
+    expect($index->shadowed())->toBe([]);
 });
 
 it('leaves a sibling root alone, segment-wise, however much the strings suggest otherwise', function () {
@@ -487,5 +538,7 @@ it('leaves a sibling root alone, segment-wise, however much the strings suggest 
     $index->describe(store('beam.realm')->register('overlays.article', 'x'));
 
     // `beam.realms` is not under `beam.realm`, so nothing it could hold is shadowed by it.
-    expect(fn () => $index->describe(store('beam.realms')))->not->toThrow(ShadowedRegistryKey::class);
+    $index->describe(store('beam.realms'));
+
+    expect($index->shadowed())->toBe([]);
 });

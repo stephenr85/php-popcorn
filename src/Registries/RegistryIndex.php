@@ -77,6 +77,20 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     private ?Authorizer $authorizer = null;
 
     /**
+     * Entries that went dark because two described roots overlap on them — ticket 73 §1's record, in
+     * place of the throw `describe()` used to raise. See {@see recordShadowing()} and {@see shadowed()}.
+     *
+     * A flat list rather than a map keyed by root, because a shadowing is a fact about a PAIR of roots
+     * and keying it by either one would make the other a value that reads like a detail. {@see shadowed()}
+     * does the filtering, on whichever end the caller is standing.
+     *
+     * @var list<Shadowed>
+     */
+    private array $shadowed = [];
+
+    private int $shadowSequence = 0;
+
+    /**
      * Whether this index is a deep-unfiltered view: the registries it hands back are unfiltered too.
      * Set only by {@see unfiltered()}, never by a host — see that method for why it is not a one-level
      * escape (registry-kernel ticket 45).
@@ -116,19 +130,19 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      *
      * @throws InvalidArgumentException the store can say what root it owns
      * @throws Exceptions\DuplicateRegistryKey another registry already claims that root
-     * @throws Exceptions\ShadowedRegistryKey the new root would make an existing entry unreadable
      */
     public function describe(Registry $store, ?object $owner = null, ?string $by = null): static
     {
         $declaration = $this->declarationOf($store, $owner);
         $root = $declaration->rootKey();
+        $by ??= $owner === null ? $store::class : $owner::class;
 
-        $this->assertUnshadowed($store, $root);
+        $this->recordShadowing($store, $root, $by);
 
         $this->registries->register(
             $root,
             $store,
-            by: $by ?? ($owner === null ? $store::class : $owner::class),
+            by: $by,
         );
 
         if ($owner !== null) {
@@ -144,9 +158,10 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     }
 
     /**
-     * Refuse a root that would make an already-registered entry unreadable (ticket 26 D5).
+     * RECORD a root that makes an already-registered entry unreadable through the index (ticket 26 D5 as
+     * amended by ticket 73).
      *
-     * Interleaved roots are LEGAL — {@see routeTo()} handles nesting by construction. What is refused is
+     * Interleaved roots are LEGAL — {@see routeTo()} handles nesting by construction. What is recorded is
      * the narrower case where one absolute key falls inside two described registries, because then the
      * answer depends on which door the caller entered. Both directions are checked, since a registry may
      * be described before or after the one it nests with:
@@ -154,25 +169,38 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      *  - the incoming root sits under an existing registry that already holds a key at or below it;
      *  - an existing root sits under the incoming registry, which already holds a key at or below THAT.
      *
+     * ## It used to throw, and ticket 73 §1 traded the fatality for the record
+     *
+     * `Exceptions\ShadowedRegistryKey` is **deleted**, not deprecated. Whether two described registries
+     * overlap is a fact about **which providers this host loaded** — the same package pair collides at
+     * one install and not at another — and the estate's standing rule is that a check whose answer
+     * depends on the host is an advisory finding, never a boot failure. A throw here made a host
+     * composition decision fatal in a kernel that cannot know the composition, which is the shape that
+     * has already stopped a Herd root booting once on a different check.
+     *
+     * This is the same trade ticket 34 made for duplicate ROOTS and ticket 48 landed, in the same shape:
+     * a {@see Shadowed} record carrying both roots, the registrant and a sequence, read back through
+     * {@see shadowed()}. It was also the prerequisite for ticket 73's automatic describe pass — an
+     * automatic pass over every declared registry turns any overlap in the estate into a boot failure at
+     * every host at once.
+     *
+     * **Detection does not merely survive the trade, it improves.** The describe-time walk can only see
+     * entries that already exist at describe time, and a registry is usually described before its
+     * registrars fill it. `Splicewire\Beam\Doctor\RegistryConformanceAudit::shadowedEntries()` reads the
+     * LIVE index after boot and sees a strict superset of this, and it GATES. So the throw was never the
+     * instrument that caught the estate's shadowing; it was the one that caught the fraction visible
+     * earliest, at the cost of being fatal.
+     *
      * **The self-hosting entry is never a party to this.** The index's root is zero-segment, i.e. a
      * prefix of every key in the estate, and its "entries" are roots rather than entry keys — checking it
-     * would refuse every registry there is, on a category error.
-     *
-     * ## The window this leaves, deliberately
-     *
-     * A registry is often described before its registrars fill it, so the entry that will collide may not
-     * exist yet at describe time. Closing that would mean `BasicRegistry::register()` consulting the
-     * index on every write, which inverts a dependency the kernel keeps one-way — the store knows nothing
-     * about the index, and that is what lets a registry be used without one. The residual window is
-     * carried by the beam-side conformance audit instead (ticket 49), which reads the live index after
-     * boot and sees exactly the state this check cannot.
+     * would report every registry there is, on a category error.
      */
     /**
      * @template TStored
      *
      * @param  Registry<TStored>  $incoming
      */
-    private function assertUnshadowed(Registry $incoming, RegistryKey $root): void
+    private function recordShadowing(Registry $incoming, RegistryKey $root, ?string $by): void
     {
         $described = $this->registries->unfiltered();
 
@@ -193,35 +221,41 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
             }
 
             if ($this->isUnder($root, $existingRoot->segments())) {
-                $this->refuseShadowed($existing, $root, $existingRoot, $root);
+                $this->recordShadowed($existing, $root, $existingRoot, $root, $by);
             }
 
             if ($this->isUnder($existingRoot, $root->segments())) {
-                $this->refuseShadowed($incoming, $existingRoot, $root, $existingRoot);
+                $this->recordShadowed($incoming, $existingRoot, $root, $existingRoot, $by);
             }
         }
     }
 
     /**
-     * Look for a key in `$holder` at or below `$boundary`, and throw naming it if one is there.
+     * Look for keys in `$holder` at or below `$boundary`, and record each one that goes dark.
      *
-     * `$shallower` and `$deeper` are the two roots as the message needs them, rather than being re-derived
+     * `$shallower` and `$deeper` are the two roots as the record needs them, rather than being re-derived
      * here: the caller already knows which of the pair is the outer one and passing it beats guessing.
+     *
+     * EVERY overlapping key is recorded, not just the first. The throwing version stopped at one because
+     * it was dying anyway; a report that names one of five entries and stops is the estate's own
+     * complaint about a throw — *"it names two colliding packages and then dies before anything can
+     * enumerate the rest"* — reproduced inside the replacement.
      */
     /**
      * @template TStored
      *
      * @param  Registry<TStored>  $holder
      */
-    private function refuseShadowed(
+    private function recordShadowed(
         Registry $holder,
         RegistryKey $boundary,
         RegistryKey $shallower,
         RegistryKey $deeper,
+        ?string $by,
     ): void {
         foreach ($holder->unfiltered()->keys() as $key) {
             if ($key->equals($boundary) || $this->isUnder($key, $boundary->segments())) {
-                throw Exceptions\ShadowedRegistryKey::for($key, $shallower, $deeper);
+                $this->shadowed[] = new Shadowed($key, $shallower, $deeper, $by, $this->shadowSequence++);
             }
         }
     }
@@ -406,6 +440,8 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
 
         unset($this->owners[(string) $key]);
 
+        $this->pruneShadowRecords();
+
         return $this;
     }
 
@@ -443,7 +479,29 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
             $this->describe($this, $this);
         }
 
+        $this->pruneShadowRecords();
+
         return $this;
+    }
+
+    /**
+     * Drop shadow records whose overlap no longer exists, because one of its two roots is gone.
+     *
+     * Driven by what is DESCRIBED rather than by the registrant that was forgotten, so it cannot drift
+     * from {@see forget()} and {@see forgetBy()} taking different routes to the same removal. Keeping a
+     * record past its condition would be the leak {@see Forgettable::forget()}'s own docblock argues
+     * against for {@see Superseded}, and worse here: a stale record reports an overlap a reader can no
+     * longer see in the index, which is indistinguishable from the reader being broken.
+     */
+    private function pruneShadowRecords(): void
+    {
+        $live = array_map('strval', $this->registries->unfiltered()->keys());
+
+        $this->shadowed = array_values(array_filter(
+            $this->shadowed,
+            fn (Shadowed $s) => in_array((string) $s->shallower, $live, true)
+                && in_array((string) $s->deeper, $live, true),
+        ));
     }
 
     public function has(RegistryKey|string $key): bool
@@ -500,6 +558,39 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     public function superseded(RegistryKey|string $key): array
     {
         return $this->registries->superseded($key);
+    }
+
+    /**
+     * Entries that went dark: each key a described registry holds at an address a NESTED described
+     * registry owns (ticket 73 §1).
+     *
+     * Empty on a healthy estate, and empty is the normal reading — this is the record that replaced
+     * `describe()`'s throw, not a routine event. `$root` filters to the records naming that root at
+     * EITHER end, because "what did my registry shadow" and "what shadowed my registry" are the same
+     * question asked from the two doors, and a caller holding one root should not have to know which end
+     * it is on.
+     *
+     * ⚠️ **An empty list is not a clean estate.** This can only see overlaps that existed at the moment
+     * one of the two registries was described, and a registry is usually described before its registrars
+     * fill it — so the entry that collides most often does not exist yet. The instrument that sees the
+     * rest is `Splicewire\Beam\Doctor\RegistryConformanceAudit::shadowedEntries()`, which reads the live
+     * index after boot and gates. Read this for the provenance it carries (who described what, and in
+     * what order) that a post-boot scan of live state cannot reconstruct; read the audit for coverage.
+     *
+     * @return list<Shadowed> oldest first
+     */
+    public function shadowed(RegistryKey|string|null $root = null): array
+    {
+        if ($root === null) {
+            return $this->shadowed;
+        }
+
+        $root = Key::of($root);
+
+        return array_values(array_filter(
+            $this->shadowed,
+            fn (Shadowed $s) => $s->shallower->equals($root) || $s->deeper->equals($root),
+        ));
     }
 
     public function children(RegistryKey|string $key): array
@@ -586,11 +677,13 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      *
      * ## It dedupes, though the invariant says it need not
      *
-     * Ticket 26 D6 landed `assertUnshadowed()` at describe time — two described registries may not
-     * both answer for one absolute key — which is what lets this be a plain merge rather than a
-     * precedence rule. The dedupe is defensive anyway, because that check leaves a **residual window**
-     * (a registry described before its registrars fill it, carried by ticket 49), and a duplicated
-     * node in a tree walk is a silent double-render rather than a caught error. Where both halves
+     * Ticket 26 D6 landed a describe-time shadow check — two described registries should not both
+     * answer for one absolute key — which is what lets this be a plain merge rather than a precedence
+     * rule. The dedupe is defensive anyway, and more so since ticket 73 §1 made that check RECORD
+     * rather than throw ({@see shadowed()}): an overlap is now reported and permitted, on top of the
+     * **residual window** it always left (a registry described before its registrars fill it, carried
+     * by ticket 49). A duplicated node in a tree walk is a silent double-render rather than a caught
+     * error, so the merge does not rely on the check at all. Where both halves
      * offer the same address, the owning registry's own key object wins, so a foreign key type keeps
      * its rendering.
      *
