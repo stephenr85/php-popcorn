@@ -29,12 +29,35 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
  * entries genuinely stamped, which would prefix every registry's address with a meaningless segment and
  * make `beam.particle.resources` unaddressable under its own name.
  *
- * ## Entries are LIVE registries, and the index constructs none of them
+ * ## Entries are LIVE registries — and since ticket 73 there is a second, BAKED door
  *
  * `describe()` takes an object that already exists. The owner built it in its own `boot()` — the
  * register-down rule again — so `keys()` walks a list of things already in memory and instantiates
- * nothing. Holding class-strings and resolving them lazily would invert the direction: the index would
- * become the thing that decides when a consumer's registry comes into being.
+ * nothing.
+ *
+ * ⚠️ **This docblock used to continue: *"Holding class-strings and resolving them lazily would invert
+ * the direction: the index would become the thing that decides when a consumer's registry comes into
+ * being."* Registry-kernel ticket 73 D2 overruled that, and the reason is worth reading before
+ * re-arguing it.** {@see describeLazily()} holds exactly that class-string, and the direction is
+ * unharmed: the owner still declares, the bake still reads the owner's own `#[IsRegistry]`, and the
+ * index still never scans or discovers at run time. What changed is only WHEN the object is built.
+ *
+ * The old rule was protecting against the index deciding a registry's construction moment. Measured,
+ * eager describing is what actually causes that harm: phase A found four registries whose classes live
+ * in one package and whose container bindings live in the HOST's providers, three behind configuring
+ * closures — so an eager `describe($app->make(...))` from the owning package **fabricates a fresh
+ * unconfigured singleton wherever nothing binds one**, failing as an ANSWER rather than an error. Lazy
+ * resolution goes through the host's container at READ time, so the host's own binding is what answers.
+ * Laziness is what preserves the direction rule here, not what breaks it.
+ *
+ * ## Three membership states, and "absent" is not "empty"
+ *
+ * A baked index that lists nothing is a host which genuinely declares no registries: legal, quiet. An
+ * index whose artifact is MISSING knows nothing, and every membership read raises
+ * {@see Exceptions\UnbakedRegistryIndex} rather than answering "nothing" — see that class for why a
+ * throw is right here and wrong for shadowing one section down. The kernel's default is neither: it is
+ * *"membership was supplied by hand"*, which is what every test and every non-Laravel consumer uses, and
+ * only a framework adapter that went looking for an artifact can call {@see markUnbaked()}.
  *
  * ## Two questions, two verbs
  *
@@ -89,6 +112,45 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     private array $shadowed = [];
 
     private int $shadowSequence = 0;
+
+    /**
+     * Roots BAKED but not yet resolved: rendered root => the class-string that provides the registry.
+     *
+     * Registry-kernel ticket 73 D2's half that does more than save time. A baked entry costs a string
+     * until something actually routes to it, so boot autoloads nothing and constructs nothing — which is
+     * what discharges the forced-construction hazard rather than mitigating it, and what makes the host's
+     * OWN container binding the thing that answers, because {@see hydrate()} resolves through the
+     * caller-supplied resolver at READ time rather than at bake time.
+     *
+     * @var array<string, class-string>
+     */
+    private array $pending = [];
+
+    /**
+     * The registrant to record for a pending root when it is finally resolved — the bake knows who
+     * declared it, and that provenance must survive until hydration or `keysBy()` loses it.
+     *
+     * @var array<string, string|null>
+     */
+    private array $pendingBy = [];
+
+    /**
+     * How a pending class-string becomes the live registry — supplied by the framework adapter, because
+     * the kernel has no container and must not grow one.
+     *
+     * @var (\Closure(class-string): object)|null
+     */
+    private ?\Closure $resolver = null;
+
+    /**
+     * Non-null when the membership list was EXPECTED and is absent; the operator-facing reason.
+     *
+     * ⚠️ The kernel's default is null — *"membership was supplied by hand"* — and it stays that way for
+     * every package testbench, every existing test and every non-Laravel consumer, all of which build an
+     * index and {@see describe()} into it. Only an adapter that went looking for an artifact can know one
+     * was missing, so only an adapter calls {@see markUnbaked()}. See {@see Exceptions\UnbakedRegistryIndex}.
+     */
+    private ?string $unbaked = null;
 
     /**
      * Whether this index is a deep-unfiltered view: the registries it hands back are unfiltered too.
@@ -155,6 +217,165 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
         $this->push($store);
 
         return $this;
+    }
+
+    /**
+     * Take a registry into the index LAZILY: its declared root now, its instance on first read.
+     *
+     * The baked half of registry-kernel ticket 73. `$root` comes off the class's `#[IsRegistry]` at BAKE
+     * time and `$class` is what provides the registry; nothing is autoloaded or constructed here, so a
+     * host with 85 declared registries pays 85 array writes at boot instead of 85 constructions.
+     *
+     * **Resolution goes through {@see resolveLazilyWith()}'s resolver at READ time**, and that is not an
+     * implementation detail — it is the reason the collapse is safe. Phase A measured four tower
+     * registries whose classes live in one package and whose container bindings live in the HOST's
+     * providers, three of them behind configuring closures. An eager `describe($app->make(...))` from the
+     * owning package fabricates a fresh unconfigured singleton wherever nothing binds one; resolving at
+     * read time means the host's own binding is what answers, whatever it is.
+     *
+     * @param  class-string  $class
+     */
+    public function describeLazily(string $root, string $class, ?string $by = null): static
+    {
+        $this->pending[$root] = $class;
+        $this->pendingBy[$root] = $by;
+
+        return $this;
+    }
+
+    /**
+     * How a pending class-string becomes an object — the container's `make()`, in a Laravel host.
+     *
+     * Injected rather than assumed because the kernel is framework-agnostic and has no container. With no
+     * resolver a pending root falls back to `new $class`, which is right for a plain PHP consumer and
+     * wrong for a host, so an adapter always sets one.
+     *
+     * @param  (callable(class-string): object)|null  $resolver
+     */
+    public function resolveLazilyWith(?callable $resolver): static
+    {
+        $this->resolver = $resolver === null ? null : \Closure::fromCallable($resolver);
+
+        return $this;
+    }
+
+    /**
+     * Declare that a membership list was expected here and is ABSENT, so every read raises rather than
+     * reporting an empty estate (ticket 73 D3.2).
+     *
+     * @see Exceptions\UnbakedRegistryIndex for why this is a throw, and why it is raised at the door
+     *      rather than at boot
+     */
+    public function markUnbaked(string $reason): static
+    {
+        $this->unbaked = $reason;
+
+        return $this;
+    }
+
+    /** Whether a membership list was expected here and is absent. */
+    public function isUnbaked(): bool
+    {
+        return $this->unbaked !== null;
+    }
+
+    /**
+     * Roots that are baked and not yet resolved — rendered root => providing class-string.
+     *
+     * For tooling that wants to show what the index KNOWS without forcing it to construct anything.
+     *
+     * @return array<string, class-string>
+     */
+    public function pending(): array
+    {
+        return $this->pending;
+    }
+
+    /**
+     * Raise if a membership list was expected here and is absent.
+     *
+     * Called at the top of every read that consults membership, and NOT from {@see describe()} or the
+     * constructor: an unbaked index must still be constructible and still be describable, or the command
+     * that writes the artifact — which boots the application — could never run.
+     *
+     * @throws Exceptions\UnbakedRegistryIndex
+     */
+    private function guard(): void
+    {
+        if ($this->unbaked !== null) {
+            throw new Exceptions\UnbakedRegistryIndex($this->unbaked);
+        }
+    }
+
+    /**
+     * Resolve ONE pending root into a live registry, if that root is still pending.
+     *
+     * This is the whole lazy path: the class is autoloaded here, constructed by the caller-supplied
+     * resolver here, shadow-checked here, and pushed the {@see Gated} authorizer here. **The authorizer
+     * push happens at resolution and not at bake**, which is the half that is not about visibility — a
+     * registry that appeared in the index without being pushed would be an unauthorized one, and lazy
+     * resolution is exactly where that could be dropped silently.
+     */
+    private function hydrate(string $root): void
+    {
+        if (! array_key_exists($root, $this->pending)) {
+            return;
+        }
+
+        $class = $this->pending[$root];
+        $by = $this->pendingBy[$root] ?? $class;
+
+        // Unset BEFORE resolving: a constructor that itself routes a key would otherwise re-enter here
+        // and recurse forever. The estate has constructor-seeded registries, so this is not theoretical.
+        unset($this->pending[$root], $this->pendingBy[$root]);
+
+        $instance = $this->resolver === null ? new $class : ($this->resolver)($class);
+
+        if ($instance instanceof Registry) {
+            $this->describe($instance, by: $by);
+
+            return;
+        }
+
+        // ⚠️ The baked path takes CONFORMING registries only, and that is a measured constraint rather
+        // than a simplification. The sanctioned composition pattern (ticket 01 D1) lets an owner HOLD a
+        // `BasicRegistry` instead of implementing `Registry`, and for that shape the two-argument
+        // `describe($store, $owner)` needs the inner store — which {@see CarriesDeclaration} does not
+        // expose and deliberately never has (it answers `declaration()`, not `store()`).
+        //
+        // It costs nothing today: measured 2026-08-31 at `~/Herd/splicewire-app`, 84 of the 85 declared
+        // classes on disk implement the contract, and the one that does not
+        // (`Schemastud\DataSchemas\Overlay\InMemoryOverlayRegistry`) cannot be described by ANY route —
+        // `describe()` has always required a `Registry`. Every owner-form registry in the estate, this
+        // index included, implements the contract itself and is described one-argument today.
+        //
+        // So a class reaching here is a conformance failure, and it is already owned and GATED by
+        // `Splicewire\Beam\Doctor\RegistryConformanceAudit`'s `contract` check. Naming that audit is the
+        // whole message: the fix is upstream of the bake, not in it.
+        throw new InvalidArgumentException(sprintf(
+            '`%s` is baked at root `%s` but does not implement `%s`, so the index cannot take it. A '
+                .'declared registry must implement the contract — this is the `contract` check of the '
+                .'registry-conformance audit, failing at run time because the bake believed the '
+                .'declaration.',
+            $class,
+            $root,
+            Registry::class,
+        ));
+    }
+
+    /**
+     * Resolve EVERY pending root.
+     *
+     * Enumeration cannot be lazy — `keys()`, a tree walk and `popcorn:registries` all need the whole set
+     * — so this is where the cost lands. That is deliberate and it is the right trade: **boot never
+     * enumerates**, so the hot path stays lazy and the price is paid by tooling that was always going to
+     * touch everything anyway.
+     */
+    private function hydrateAll(): void
+    {
+        while ($this->pending !== []) {
+            $this->hydrate(array_key_first($this->pending));
+        }
     }
 
     /**
@@ -277,13 +498,18 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     /** @return Registry<mixed>|null */
     public function routeTo(RegistryKey|string $key): ?Registry
     {
-        $key = Key::of($key);
-        $unfiltered = $this->registries->unfiltered();
+        $this->guard();
 
+        $key = Key::of($key);
+
+        // The longest-prefix walk runs over roots the index KNOWS — resolved and pending alike — because
+        // a baked root is every bit as described as a resolved one; only its instance is deferred. This
+        // is the single hot path that must stay lazy, so it compares strings and hydrates exactly the one
+        // root that wins, never the set.
         $best = null;
         $depth = -1;
 
-        foreach ($unfiltered->keys() as $root) {
+        foreach ($this->knownRoots() as $root) {
             $prefix = $root->segments();
 
             if (! $key->equals($root) && ($prefix === [] || ! $this->isUnder($key, $prefix))) {
@@ -296,7 +522,34 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
             }
         }
 
-        return $best === null ? null : $this->reveal($unfiltered->resolve($best));
+        if ($best === null) {
+            return null;
+        }
+
+        $this->hydrate((string) $best);
+
+        return $this->reveal($this->registries->unfiltered()->resolve($best));
+    }
+
+    /**
+     * Every root the index knows about — resolved plus still-pending — as {@see RegistryKey}s.
+     *
+     * A pending root is stored as the rendered string the bake wrote, so it is re-keyed through
+     * {@see Key::of()} here. That is safe for every root the bake can produce (they come off
+     * `#[IsRegistry(root:)]`, which is a dotted `Key` by declaration) and it is why a FOREIGN key type
+     * cannot be baked — such a registry keeps the hand-written `describe()` it always had.
+     *
+     * @return list<RegistryKey>
+     */
+    private function knownRoots(): array
+    {
+        $roots = $this->registries->unfiltered()->keys();
+
+        foreach (array_keys($this->pending) as $root) {
+            $roots[] = Key::of($root);
+        }
+
+        return $roots;
     }
 
     /**
@@ -332,6 +585,8 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      */
     public function ownerOf(RegistryKey|string $key): Registry
     {
+        $this->guard();
+
         return $this->routeTo($key) ?? throw UnregisteredRegistry::for(
             $key,
             array_map('strval', $this->registries->unfiltered()->keys()),
@@ -346,6 +601,9 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      */
     public function owner(RegistryKey|string $root): ?object
     {
+        $this->guard();
+        $this->hydrateAll();
+
         $root = Key::of($root);
 
         return $this->owners[(string) $root] ?? $this->registries->tryResolve($root);
@@ -366,6 +624,9 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      */
     public function declarationAt(RegistryKey|string $root): ?IsRegistry
     {
+        $this->guard();
+        $this->hydrateAll();
+
         $root = Key::of($root);
         $store = $this->registries->unfiltered()->tryResolve($root);
 
@@ -506,26 +767,41 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
 
     public function has(RegistryKey|string $key): bool
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->has($key);
     }
 
     public function resolve(RegistryKey|string $key): mixed
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->reveal($this->registries->resolve($key));
     }
 
     public function tryResolve(RegistryKey|string $key): mixed
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->reveal($this->registries->tryResolve($key));
     }
 
     public function matches(RegistryKey|string $key): array
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return array_map(fn (mixed $store): mixed => $this->reveal($store), $this->registries->matches($key));
     }
 
     public function keys(): array
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->keys();
     }
 
@@ -539,12 +815,18 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      */
     public function registrantOf(RegistryKey|string $key): ?string
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->registrantOf($key);
     }
 
     /** {@see RecordsRegistrants} — every root described by `$registrant`. */
     public function keysBy(string $registrant): array
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->keysBy($registrant);
     }
 
@@ -595,16 +877,25 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
 
     public function children(RegistryKey|string $key): array
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->children($key);
     }
 
     public function descendants(RegistryKey|string $key): array
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->descendants($key);
     }
 
     public function nodeAt(RegistryKey|string $key): RegistryNode
     {
+        $this->guard();
+        $this->hydrateAll();
+
         return $this->registries->nodeAt($key);
     }
 
@@ -774,6 +1065,9 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      */
     public function unfiltered(): Registry
     {
+        $this->guard();
+        $this->hydrateAll();
+
         $unfiltered = clone $this;
         $unfiltered->authorizer = null;
         $unfiltered->deep = true;
