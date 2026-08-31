@@ -84,6 +84,11 @@ enum OnDuplicate: string
      * `Splicewire\Beam\Realm\RealmOverlayRegistry`. Cite those; the tower story is provenance, not an
      * instance.
      *
+     * ⚠️ **And do not read this case as an invitation to build a kernel alias.** That proposal has been
+     * made and refused; the argument, the estate's alias census (zero, three deletions) and the reason
+     * an alias would constrain THIS enum are on {@see Registry}, under *"No aliases"*. The pool cited
+     * above is not a registry-key alias at all — neither side of it is a {@see RegistryKey}.
+     *
      * The only policy under which {@see Exceptions\MissReason::Ambiguous} can fire at an EXACT key
      * — and only then under `PickOne`, since under `ComposeMany`/`RunAll` several matches are the
      * answer rather than the error.

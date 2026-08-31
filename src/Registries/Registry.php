@@ -38,6 +38,64 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  *   have to know entry types it cannot know (ticket 06).
  * - **No normalisation.** Parsing lives on {@see Key}; a registry that redefined what a key IS breaks
  *   the index the moment a key crosses a package boundary (ticket 05).
+ * - **No aliases.** No `Aliases` interface, no `RegistryKeyAlias` value, no second name a key answers
+ *   to. Argued below, because unlike the others this one keeps getting proposed.
+ *
+ * ## No aliases — the estate's census is zero, and it got there by deleting them
+ *
+ * The recurring proposal is a kernel-tier alias: an `Aliases` interface and a `RegistryKeyAlias`
+ * value, resolved by the registry above {@see Key} (never inside it — `Key` refuses folding, and that
+ * seam is not negotiable). It is refused, and the argument is measurement, not taste.
+ *
+ * **Three alias mechanisms have existed in this estate. All three are deleted, and each died of the
+ * same disease.**
+ *
+ * - `CapabilityLadder::$overlayAliases` — declared, cleared on teardown, read as `mapName()`'s FIRST
+ *   rung, and **assigned by nothing, fleet-wide**. The branch was unreachable for its whole life
+ *   (registry-kernel ticket 36 D3).
+ * - `CapabilityLadder::$aliases` — the surviving half, with **one member estate-wide**
+ *   (`url_import` → `ingest-urls`). Registry-kernel ticket 66 deleted it after measuring the stored
+ *   vocabulary across every tenant: **zero rows spoke `url_import`.** Meanwhile `get_fragments` (4
+ *   rows) and `intake_form` (1) — two names the rung had never aliased — needed a real data
+ *   migration. *The alias was guarding the only name nobody used.*
+ * - The flagship's `AliasEntry[]` route table — one producer, zero consumers, no test. It drifted
+ *   silently (still routing `/circuit-runs` to `/system` long after the section moved) and disagreed
+ *   with the client about `/operator`, with the client winning because the server's copy was inert.
+ *   Deleted by realm-and-floor-reconciliation ticket 01.
+ *
+ * **The mechanism is self-concealing, which is why the census reads zero rather than small.** An
+ * alias makes a rename resolve without making the stored vocabulary correct: two names work, one is
+ * recorded, and no query can tell you which callers still speak the old one. So an alias cannot be
+ * measured *while it is load-bearing* — it can only be measured after someone deletes it. Ticket 66's
+ * conclusion, which is the doctrine here: **migrate the vocabulary at the source, once, rather than
+ * translating it on every read forever by a map nobody re-measures.** Compare
+ * `Splicewire\Tower\Data\Filters\ThreadFilterData`, which declines an alias in one line — *"an alias
+ * would buy backward compatibility for a key no caller can be holding."*
+ *
+ * **The one live alias-shaped thing in the estate is not a registry-key alias.**
+ * `CapabilityLadder::$overlayConduits` — the pool {@see OnDuplicate::Admit} cites for its
+ * deterministic ambiguity refusal — resolves `{provider}:{alias}.{tool}` handles. Its alias is
+ * per-tenant row data assigned by a user, namespaced by provider, uniqueness-enforced at a
+ * connect-time DB chokepoint (`ConduitAliasRegistrar`), and its resolution additionally checks tool
+ * membership. Neither side is a {@see RegistryKey}, and nothing a kernel primitive could offer would
+ * serve it. A one-instance shape that is not even an instance is not a two-beneficiary case.
+ *
+ * **And the design has a cost the proposal does not price.** Ticket 66's *"enforce the same resolving
+ * `entryType`"* is the easy half; the hard half is {@see OnDuplicate}. The prior-art survey found
+ * systemd and NixOS reaching the same answer independently — systemd loads drop-ins for *"the aliased
+ * name and all aliases"*, and NixOS's `mkRenamedOptionModule` wraps aliased definitions in `mkMerge`,
+ * documenting that *"'to' Options whose types don't support merging … are not well-supported"*. So
+ * **an alias constrains which duplicate policies its target may declare**, and this kernel declares
+ * **no merge** (the bullet three above) precisely because `entryType` is `'mixed'` across most of the census. A
+ * kernel alias would therefore ship either a merge it cannot perform or a silent divergence from two
+ * of the three systems that solved this. (NixOS reached its own verdict too:
+ * `mkAliasOptionModuleMD` is deprecated in-source.)
+ *
+ * {@see Laddered} is NOT the precedent to argue from. `Laddered` buys legibility for tiers **four
+ * registries genuinely run**; the kernel declines to climb only because those four hold three
+ * different policies. Aliases have no four, no three and no one — a declare-only `Aliases` would be
+ * legibility for a population of zero. If a second genuine instance ever appears, reopen this with
+ * both instances named; until then the answer is a rename plus a migration.
  *
  * ## Declaration is an attribute, not a method
  *

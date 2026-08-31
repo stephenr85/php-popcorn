@@ -13,6 +13,10 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  * or it throws — no case folding, no separator unification, no trimming, no alias resolution. Four
  * consequences, each load-bearing:
  *
+ * (On that last one: the recurring counter-proposal is not a key-level fold but a REGISTRY-level alias
+ * step ABOVE this class, which would leave everything here intact. It is refused too, on its own
+ * evidence rather than on this rule — see {@see Registry}, *"No aliases"*.)
+ *
  * - **Idempotence is trivially true.** Nothing is rewritten, so the question "is this input already
  *   normalized?" — the question that killed systemd's `systemd-escape --mangle` — cannot be asked.
  * - **The runtimes cannot disagree.** The charset is ASCII-lowercase with no folding rule anywhere, so
