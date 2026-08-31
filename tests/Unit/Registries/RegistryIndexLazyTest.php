@@ -142,3 +142,38 @@ it('distinguishes a MISSING list from a host that genuinely declares nothing', f
         ->and(array_map('strval', $baked->keys()))->toBe([''])
         ->and($baked->routeTo('nothing.here'))->toBeNull();
 });
+
+it('stops being blind the moment something is described by hand', function () {
+    // The transition rule, and it is what makes the cutover survivable in either order: "unbaked" means
+    // NO membership source at all. A host still running hand-written describes has one, whatever the
+    // artifact's state, so it behaves exactly as it always did.
+    $index = (new RegistryIndex)->markUnbaked('no artifact');
+
+    $index->describe(new LazyRegistry);
+
+    expect($index->isUnbaked())->toBeFalse()
+        ->and($index->routeTo('lazy.demo.one')->resolve('one'))->toBe('first');
+});
+
+it('does not count its own self-hosting describe as a membership source', function () {
+    // The constructor describes the index into itself. Counting that would make every index look
+    // supplied and make the blindness unreachable — the check would exist and never fire.
+    $index = (new RegistryIndex)->markUnbaked('no artifact');
+
+    expect($index->isUnbaked())->toBeTrue();
+});
+
+it('lets a hand describe supersede a pending bake for the same root, without resolving it twice', function () {
+    $index = new RegistryIndex;
+    $index->describeLazily('lazy.demo', LazyRegistry::class, by: 'bake');
+
+    $byHand = new LazyRegistry;
+    $index->describe($byHand);
+
+    // The hand-described object is the one that answers, and the pending entry is gone rather than
+    // waiting to overwrite it on the next read — which is what keeps the transitional estate (bake
+    // present AND hand describes still in place) from describing every root twice.
+    expect($index->pending())->toBe([])
+        ->and($index->routeTo('lazy.demo.one'))->toBe($byHand)
+        ->and(LazyRegistry::$constructions)->toBe(1);
+});

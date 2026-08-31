@@ -199,6 +199,23 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
         $root = $declaration->rootKey();
         $by ??= $owner === null ? $store::class : $owner::class;
 
+        // A hand describe SUPERSEDES a pending bake for the same root, and CLEARS blindness. Both halves
+        // are what make the cutover survivable in either order.
+        //
+        // "Unbaked" means *no membership source at all*. An index that is being described into has one —
+        // whatever the artifact's state — so a host still running hand-written `describe()` calls behaves
+        // exactly as it always did, and only a host with neither an artifact nor a describe is blind.
+        // That is the state the collapse creates and the state D3.2 exists to make loud.
+        //
+        // The self-hosting describe from the constructor is deliberately NOT a membership source: the
+        // index describing itself says nothing about whether anything else is described, and counting it
+        // would make every index look supplied and the blindness unreachable.
+        if ($store !== $this) {
+            $this->unbaked = null;
+
+            unset($this->pending[(string) $root], $this->pendingBy[(string) $root]);
+        }
+
         $this->recordShadowing($store, $root, $by);
 
         $this->registries->register(
@@ -546,7 +563,10 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
         $roots = $this->registries->unfiltered()->keys();
 
         foreach (array_keys($this->pending) as $root) {
-            $roots[] = Key::of($root);
+            // `Key::of('')` is not legal — the zero-segment root is `Key::root()`, and it belongs to the
+            // index alone. A bake must never emit it (that is the bake's rule, and it has its own
+            // comment), but routing must not die if one ever arrives.
+            $roots[] = $root === '' ? Key::root() : Key::of($root);
         }
 
         return $roots;
