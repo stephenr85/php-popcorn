@@ -180,8 +180,13 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * `$store` is what routing hands reads to; `$owner` is the object the estate calls "the registry" —
      * the class carrying the `#[IsRegistry]` declaration and whatever caller-facing sugar it exposes.
      * They differ under the sanctioned composition pattern, where the owner HOLDS a {@see BasicRegistry}
-     * rather than implementing {@see Registry} itself (ticket 01 D1), and the one-line call in the
-     * owner's `boot()` is `$index->describe($this->entries, $this)`.
+     * rather than implementing {@see Registry} itself (ticket 01 D1).
+     *
+     * ⚠️ **This is no longer how a registry normally enters the index.** Ticket 73's cutover deleted the
+     * 60 hand-written `describe()` calls across the estate; membership is baked from the class's own
+     * `#[IsRegistry]` and taken through {@see describeLazily()}. This method remains the door — the bake
+     * calls it, and a consumer building its own index by hand still may — but a provider that adds a
+     * `describe()` call today is re-introducing the act the ticket removed.
      *
      * Requiring the owner to implement `Registry` instead — so one argument would do — was rejected
      * precisely because it would make method-for-method delegation mandatory and quietly withdraw that
