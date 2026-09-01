@@ -2,7 +2,7 @@
     "name": "rushing/php-popcorn",
     "description": "Framework-free core for transport-agnostic invocable capabilities and self-validating strategy ladders — the invocable kernel behind rushing/laravel-popcorn.",
     "keywords": ["invocable", "strategy", "capability", "registry", "binding"],
-    "license": "proprietary",
+    "license": "MIT",
     "authors": [
         {
             "name": "Stephen Rushing",
