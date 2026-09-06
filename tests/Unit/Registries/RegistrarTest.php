@@ -9,7 +9,6 @@ use Rushing\Popcorn\Registries\Registrars\AttributeRegistrar;
 use Rushing\Popcorn\Registries\Registrars\CachedRegistrar;
 use Rushing\Popcorn\Registries\Registrars\ConfigRegistrar;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\AnnotatedResource;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\ScannedResource;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\SelfKeyingEntry;
@@ -27,8 +26,7 @@ function filled(string $root = 'beam.renderings'): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        of: 'test entries',
-        arity: RegistryArity::PickOne,
+        description: 'test entries',
     ));
 }
 

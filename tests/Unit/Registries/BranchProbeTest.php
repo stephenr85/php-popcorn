@@ -7,7 +7,6 @@ use Rushing\Popcorn\Registries\Exceptions\AmbiguousRegistryMatch;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryIndex;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Registries\RegistryNode;
@@ -26,9 +25,8 @@ function probeStore(string $root): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        of: 'test entries',
-        arity: RegistryArity::PickOne,
         onDuplicate: OnDuplicate::Supersede,
+        description: 'test entries',
     ));
 }
 

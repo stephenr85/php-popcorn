@@ -90,8 +90,7 @@ enum OnDuplicate: string
      * above is not a registry-key alias at all — neither side of it is a {@see RegistryKey}.
      *
      * The only policy under which {@see Exceptions\MissReason::Ambiguous} can fire at an EXACT key
-     * — and only then under `PickOne`, since under `ComposeMany`/`RunAll` several matches are the
-     * answer rather than the error.
+     * during a single-entry read. `matches()` returns all matching entries without ambiguity.
      */
     case Admit = 'admit';
 }

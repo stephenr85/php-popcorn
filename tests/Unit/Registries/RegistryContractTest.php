@@ -14,7 +14,6 @@ use Rushing\Popcorn\Registries\Nested;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\DeclaredRegistry;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\InheritingRegistry;
@@ -34,8 +33,7 @@ function registry(
 ): BasicRegistry {
     return new BasicRegistry(new IsRegistry(
         root: 'beam.resources',
-        of: 'test entries',
-        arity: RegistryArity::PickOne,
+        description: 'test entries',
         onDuplicate: $onDuplicate,
         optionality: $optionality,
     ));
@@ -46,8 +44,7 @@ function rootedAt(string $root): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        of: 'test entries',
-        arity: RegistryArity::PickOne,
+        description: 'test entries',
     ));
 }
 
@@ -68,13 +65,12 @@ it('keeps attach, forget and the tree walks OFF the base interface', function ()
         ->and(interface_exists(Filled::class))->toBeTrue();
 });
 
-it('declares root, of, arity, entryType — and no seam', function () {
+it('declares a root, entry type and optional description', function () {
     $declaration = IsRegistry::of(DeclaredRegistry::class);
 
     expect($declaration)->toBeInstanceOf(IsRegistry::class)
         ->and($declaration->root)->toBe('beam.resources')
-        ->and($declaration->of)->toBe('test entries, for the contract suite')
-        ->and($declaration->arity)->toBe([RegistryArity::RunAll])
+        ->and($declaration->description)->toBe('test entries, for the contract suite')
         ->and($declaration->entryType)->toBe('string')
         ->and($declaration->rootKey()->segments())->toBe(['beam', 'resources'])
         ->and(property_exists($declaration, 'seam'))->toBeFalse()
@@ -82,38 +78,13 @@ it('declares root, of, arity, entryType — and no seam', function () {
         ->and(property_exists($declaration, 'registerHint'))->toBeFalse();
 });
 
-/**
- * Ticket 47. Two shipped registries read in two steps — `PipelineRegistry` picks a named pipeline then
- * composes its stages, `ResourceRenderingRegistry` picks a resource then runs its renderings — and both
- * descriptors recorded only the inner step. `arity` is the read path outermost-first.
- *
- * The bare case stays legal on purpose: 77 of 79 registries have one step, and if declaring the common
- * case got uglier the estate would drift back to the wrong scalar. What must NOT vary is the stored
- * shape, because ticket 16 records `popcorn:registries --json` as the presumptive TS wire projection and
- * a sometimes-scalar field is the worst thing to put on a wire. So: scalar in, list out, always.
- */
-it('normalises a bare arity to a one-member list, so the stored shape never varies', function () {
-    $bare = new IsRegistry(root: 'test.bare', of: 'one step', arity: RegistryArity::PickOne);
-    $listed = new IsRegistry(root: 'test.listed', of: 'one step, written as a list', arity: [RegistryArity::PickOne]);
+it('allows a declaration with only a root', function () {
+    $declaration = new IsRegistry(root: 'test.entries');
 
-    expect($bare->arity)->toBe([RegistryArity::PickOne])
-        ->and($listed->arity)->toBe([RegistryArity::PickOne])
-        ->and($bare->arity)->toBe($listed->arity);
-});
-
-it('keeps a multi-step arity in declaration order, outermost first', function () {
-    $declaration = new IsRegistry(
-        root: 'test.pipelines',
-        of: 'a named chain: pick the pipeline, then compose its stages',
-        arity: [RegistryArity::PickOne, RegistryArity::ComposeMany],
-    );
-
-    expect($declaration->arity)->toBe([RegistryArity::PickOne, RegistryArity::ComposeMany]);
-});
-
-it('refuses an empty arity, because a read engages at least one entry', function () {
-    expect(fn () => new IsRegistry(root: 'test.empty', of: 'nothing', arity: []))
-        ->toThrow(InvalidArgumentException::class, 'test.empty');
+    expect($declaration->entryType)->toBe('mixed')
+        ->and($declaration->description)->toBeNull()
+        ->and($declaration->onDuplicate)->toBe(OnDuplicate::Supersede)
+        ->and($declaration->optionality)->toBe(Optionality::Optional);
 });
 
 it('reaches OnDuplicate and Optionality as declared registry properties, not just loose enums', function () {
@@ -133,7 +104,7 @@ it('walks up to the nearest declaration, so an undeclaring subclass inherits its
     $declaration = IsRegistry::of(InheritingRegistry::class);
 
     expect($declaration->root)->toBe('beam.resources')
-        ->and($declaration->arity)->toBe([RegistryArity::RunAll])
+        ->and($declaration->description)->toBe('test entries, for the contract suite')
         ->and($declaration->onDuplicate)->toBe(OnDuplicate::Reject)
         // The fatal half ticket 28 found in laravel-graphine's own suite: this line threw.
         ->and(BasicRegistry::for(InheritingRegistry::class)->root())->toBe('beam.resources');
@@ -143,7 +114,7 @@ it('lets the NEAREST declaration win, so a subclass still takes its own branch b
     $declaration = IsRegistry::of(OverridingRegistry::class);
 
     expect($declaration->root)->toBe('beam.overrides')
-        ->and($declaration->arity)->toBe([RegistryArity::PickOne])
+        ->and($declaration->description)->toBe('test entries, for the subclass-declares case')
         ->and($declaration->entryType)->toBe('int')
         ->and($declaration->onDuplicate)->toBe(OnDuplicate::Admit)
         // Nothing is merged: the parent's non-default Optionality does not leak through the override.
@@ -423,7 +394,7 @@ it('receives the declared ability and the key, and neither the actor nor the ent
         ->resolve('beam.resources.payroll');
 
     // The signature is the assertion: an implementor cannot reach the actor or the entry value from
-    // here, which is what makes a PickOne hit and a 400-entry enumeration cost the same (09 D1).
+    // here, which is what makes a keyed hit and a 400-entry enumeration cost the same (09 D1).
     expect($authorizer->seen)->toBe([['view-payroll', 'beam.resources.payroll']]);
 });
 

@@ -12,7 +12,6 @@ use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryIndex;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey;
@@ -28,9 +27,8 @@ function store(string $root, OnDuplicate $onDuplicate = OnDuplicate::Supersede):
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        of: 'test entries',
-        arity: RegistryArity::PickOne,
         onDuplicate: $onDuplicate,
+        description: 'test entries',
     ));
 }
 
@@ -129,7 +127,6 @@ it('reads a described registry\'s declaration off the LIVE registry, not off its
     $index->describe(store('beam.particle.resources'), new stdClass);
 
     expect($index->declarationAt('beam.particle.resources')?->root)->toBe('beam.particle.resources')
-        ->and($index->declarationAt('beam.particle.resources')?->arity)->toBe([RegistryArity::PickOne])
         ->and($index->declarationAt('nothing.described.here'))->toBeNull();
 });
 

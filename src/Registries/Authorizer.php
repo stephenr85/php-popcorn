@@ -25,7 +25,7 @@ namespace Rushing\Popcorn\Registries;
  * own actor source; the kernel never learns there is one.
  *
  * **No entry value**, because Popcorn must not construct a value in order to decide whether you may
- * see it. That is what makes a `PickOne` hit and a 400-entry enumeration cost the same, and it is
+ * see it. That is what makes a keyed hit and a 400-entry enumeration cost the same, and it is
  * why this seam is safe to call per-entry rather than needing a batch form.
  *
  * What it gets instead is the ability string the entry DECLARED at registration, plus its key. The

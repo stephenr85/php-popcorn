@@ -16,7 +16,6 @@ use Rushing\Popcorn\Registries\Nested;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Registries\RegistryNode;
 
@@ -61,15 +60,10 @@ use Rushing\Popcorn\Registries\RegistryNode;
  */
 #[IsRegistry(
     root: 'popcorn.invocables',
-    of: 'named, transport-agnostic capabilities — array in, array out',
-    arity: RegistryArity::PickOne,
     entryType: Invocable::class,
     onDuplicate: OnDuplicate::Supersede,
     optionality: Optionality::Optional,
-    note: 'Duplicate names are the swap seam, not an accident: re-registering a name overrides the '
-        .'prior binding, so a package default swaps for a host- or tenant-specific one without any '
-        .'caller changing. Live case: `Rushing\PrismPlus\PrismPlusManager::register()`, whose own '
-        .'capability registries are seeded with built-in providers a host then overrides by name.',
+    description: 'named, transport-agnostic capabilities — array in, array out. Duplicate names are the swap seam, not an accident: re-registering a name overrides the prior binding, so a package default swaps for a host- or tenant-specific one without any caller changing. Live case: `Rushing\\PrismPlus\\PrismPlusManager::register()`, whose own capability registries are seeded with built-in providers a host then overrides by name.',
 )]
 class InvocableRegistry implements Forgettable, Gated, Nested, Registry
 {

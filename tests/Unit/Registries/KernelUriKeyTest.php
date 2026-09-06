@@ -7,7 +7,6 @@ use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RelativeUriKey;
 use Rushing\Popcorn\Registries\Rootable;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey as ConsumerOwnedKey;
@@ -26,10 +25,9 @@ function uriKeyRegistry(string $root = 'nav.kinds'): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        of: 'nav kinds',
-        arity: RegistryArity::PickOne,
         onDuplicate: OnDuplicate::Supersede,
         optionality: Optionality::Optional,
+        description: 'nav kinds',
     ));
 }
 

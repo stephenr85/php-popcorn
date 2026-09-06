@@ -15,7 +15,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * anyway). The intended shape is composition:
  *
  * ```php
- * #[IsRegistry(root: 'beam.particle.resources', of: '…', arity: RegistryArity::PickOne)]
+ * #[IsRegistry(root: 'beam.particle.resources', entryType: ParticleResource::class)]
  * class ParticleResourceRegistry
  * {
  *     private BasicRegistry $entries;

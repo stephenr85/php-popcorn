@@ -73,18 +73,11 @@ namespace Rushing\Popcorn\Registries;
  * multi-axis case stays expressible. Naming the axis is also what makes the map readable next to a
  * `rungs()` list without either being mistaken for the other.
  *
- * ## Arity is orthogonal — a `PickOne` registry may still be faceted
+ * ## Facets classify entries independently of reads
  *
- * It is tempting to assume facets belong to registries that return many, and the estate says otherwise.
- * The six registries whose entries carry a classification span every arity: `RunAll` (`LensRegistry`,
- * `ScaffoldPackContentRegistry`), `ComposeMany` (`CorpusStreamRegistry`), and `PickOne`
- * (`ParticleOperationRegistry`, `ConduitProviderRegistry`, `CompositionProfileRegistry`).
- *
- * The reason they do not interact: **arity governs `resolve()`, facets partition `all()`.** A `PickOne`
- * registry shadows *per key* — one entry wins that address — and says nothing about how the surviving
- * entries classify. `ParticleOperation` is uniquely resolved by key and still carries a
- * read/write/task/stream `kind`. So do not read a facet declaration as a claim about arity, in either
- * direction.
+ * A registry can resolve entries individually and still expose facets for browsing its contents.
+ * For example, a `ParticleOperation` is resolved by key and also carries a read/write/task/stream
+ * `kind`. Declaring that facet does not change how the registry resolves an entry.
  *
  * ## What it does NOT cover
  *

@@ -9,8 +9,8 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
 /**
  * The one primitive: a keyed collection something registers INTO and something else reads OUT of,
  * addressed by {@see RegistryKey}. Everything the estate calls a Registry, a Manifest, a Pipeline or
- * a Store is this (canon: `the-seam-is-a-registry`); what differs between them is the ARITY of a
- * read, not the suffix on the class name.
+ * a Store is this (canon: `the-seam-is-a-registry`). Consumers can look up entries, enumerate them,
+ * or compose their behavior according to the purpose of the registry.
  *
  * ## An interface, never a base class
  *
@@ -99,7 +99,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  *
  * ## Declaration is an attribute, not a method
  *
- * A registry declares its `root`, what it is `of`, its arity, its duplicate policy and its optionality
+ * A registry declares its root, entry type, duplicate policy, optionality, and optional description
  * through {@see IsRegistry} on the class — the only mechanism a static walk can read without booting,
  * which is what lets the surgeon gate check conformance (ticket 01 §4, ticket 14).
  *
@@ -136,7 +136,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * A port names the type once and every call site downstream of it is typed:
  *
  * ```php
- * #[IsRegistry(root: 'beam.particle.resources', of: '…', entryType: ResourceDefinition::class)]
+ * #[IsRegistry(root: 'beam.particle.resources', entryType: ResourceDefinition::class)]
  * interface ResourceRegistry extends Registry<ResourceDefinition> {}
  *
  * $registry->resolve('invoices');   // ResourceDefinition, not mixed
@@ -244,8 +244,8 @@ interface Registry
      * story: it is what `descriptors()`-style foundation-first rendering needs, and it is why there is
      * no `rank` field to drift out of sync with it (ticket 08 D4).
      *
-     * Superseded entries are never included. Arity is about live entries; supersession is history, and
-     * conflating them is how a `RunAll` registry starts running dead entries (ticket 01 D9).
+     * Superseded entries are never included. Reads return live entries; supersession is history, and
+     * conflating them makes an enumeration include displaced entries (ticket 01 D9).
      *
      * @return list<TEntry>
      */

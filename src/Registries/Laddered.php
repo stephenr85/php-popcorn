@@ -70,8 +70,6 @@ interface Laddered
      * The tiers this registry resolves through, **outermost first** — the tier consulted first,
      * whose entries shadow every tier after it.
      *
-     * The order matches {@see RegistryArity} lists, which are also outermost-first (ticket 47).
-     *
      * @return non-empty-list<string>
      */
     public function rungs(): array;

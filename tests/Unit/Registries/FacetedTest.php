@@ -75,16 +75,14 @@ it('is unordered in both dimensions, so nothing shadows', function () {
         expect(array_diff($values, $reversed[$axis]))->toBe([]);
     }
 
-    // And the interface says nothing about order, unlike `Laddered`, whose `rungs()` docblock pins it
-    // to `RegistryArity`'s outermost-first convention.
+    // The interface says nothing about order; Laddered's rungs are explicitly outermost first.
     $doc = (new ReflectionMethod(Faceted::class, 'facets'))->getDocComment();
     expect($doc)->toContain('Unordered');
     expect((new ReflectionMethod(Laddered::class, 'rungs'))->getDocComment())->toContain('outermost first');
 });
 
 it('composes with the other optional capabilities rather than replacing them', function () {
-    // A faceted registry is free to also be gated or filled; the capabilities are orthogonal, and
-    // arity is orthogonal too (the estate's carriers span RunAll, ComposeMany and PickOne).
+    // A faceted registry is free to also be gated or filled; the capabilities are independent.
     expect(new FacetedRegistry)
         ->toBeInstanceOf(Faceted::class)
         ->toBeInstanceOf(Gated::class)

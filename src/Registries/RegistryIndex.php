@@ -76,17 +76,10 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
  */
 #[IsRegistry(
     root: '',
-    of: 'every registry in the estate, keyed by the root of the keyspace it owns',
-    arity: RegistryArity::PickOne,
     entryType: Registry::class,
     onDuplicate: OnDuplicate::Supersede,
     optionality: Optionality::Required,
-    note: 'Roots must be unique, and a duplicate is RECORDED rather than fatal: the later describe() '
-        .'takes the root in the earlier one\'s slot and the displaced registry is readable through '
-        .'superseded(), carrying its registrant and sequence. That is strictly more information than a '
-        .'throw, which names two colliding packages and then dies before anything can enumerate the '
-        .'rest — and a root collision depends on which host loaded which providers, which is the one '
-        .'thing the estate has ruled must not be fatal at boot (registry-kernel 34, landed by 48).',
+    description: 'every registry in the estate, keyed by the root of the keyspace it owns. Roots must be unique, and a duplicate is RECORDED rather than fatal: the later describe() takes the root in the earlier one\'s slot and the displaced registry is readable through superseded(), carrying its registrant and sequence. That is strictly more information than a throw, which names two colliding packages and then dies before anything can enumerate the rest — and a root collision depends on which host loaded which providers, which is the one thing the estate has ruled must not be fatal at boot (registry-kernel 34, landed by 48).',
     order: 0,
 )]
 class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, RecordsSupersession, Registry
@@ -905,7 +898,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * {@see RecordsSupersession} — what was displaced at this root.
      *
      * Empty until something is displaced, and under registry-kernel ticket 48 the index CAN now displace:
-     * see the `onDuplicate` note on the class attribute for why a duplicate root became a recorded
+     * see the description on the class attribute for why a duplicate root became a recorded
      * supersession rather than a boot-time throw.
      */
     public function superseded(RegistryKey|string $key): array

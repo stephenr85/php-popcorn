@@ -12,8 +12,8 @@ namespace Rushing\Popcorn\Registries;
  * ## Registrars are wiring, not identity — so they are never declared on the attribute
  *
  * PHP 8.1's new-in-initializers would permit `#[IsRegistry(registrars: [new ConfigRegistrar('…')])]`,
- * and that is precisely wrong. {@see IsRegistry} carries what a registry IS — its root, what it is of,
- * its arity. Registrars carry where a PARTICULAR HOST's entries come from. Freezing a config key into an
+ * and that is precisely wrong. {@see IsRegistry} carries the root, entry type, and policies.
+ * Registrars carry where a PARTICULAR HOST's entries come from. Freezing a config key into an
  * attribute breaks the moment a host rebinds it, and the scan paths a registrar needs already come from
  * config in three live cases (`beam.core.resources.discover_paths`, `beam.core.realms.classes`, and
  * beam-mcp's). So attachment is imperative, at the owner's `boot()`.

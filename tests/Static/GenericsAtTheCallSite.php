@@ -7,7 +7,6 @@ use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryIndex;
 
 /**
@@ -49,11 +48,10 @@ interface ResourceRegistry extends Registry {}
  */
 #[IsRegistry(
     root: 'popcorn.static-fixture.resources',
-    of: 'resource definitions, for the generics fixture',
-    arity: RegistryArity::PickOne,
     entryType: ResourceDefinition::class,
     onDuplicate: OnDuplicate::Supersede,
     optionality: Optionality::Optional,
+    description: 'resource definitions, for the generics fixture',
 )]
 class ComposedResourceRegistry
 {

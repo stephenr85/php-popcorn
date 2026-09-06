@@ -7,7 +7,6 @@ use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
-use Rushing\Popcorn\Registries\RegistryArity;
 
 /**
  * A class name as a key, carrying its NAMESPACE.
@@ -29,10 +28,9 @@ function classKeyRegistry(): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: 'schemas.fixtures',
-        of: 'fixtures keyed by declaring class',
-        arity: RegistryArity::PickOne,
         onDuplicate: OnDuplicate::Supersede,
         optionality: Optionality::Optional,
+        description: 'fixtures keyed by declaring class',
     ));
 }
 

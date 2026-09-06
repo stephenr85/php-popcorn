@@ -8,7 +8,6 @@ use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Nested;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryIndex;
 use Rushing\Popcorn\Registries\RegistryKey;
 
@@ -34,9 +33,8 @@ function gatedStore(string $root): BasicRegistry
 {
     return (new BasicRegistry(new IsRegistry(
         root: $root,
-        of: 'test entries',
-        arity: RegistryArity::PickOne,
         onDuplicate: OnDuplicate::Supersede,
+        description: 'test entries',
     )))
         ->register('open', 'visible to everyone')
         ->register('secret', 'gated', ability: 'read-secret');
@@ -59,9 +57,8 @@ function denyEverything(): Authorizer
  */
 #[IsRegistry(
     root: 'demo.port',
-    of: 'entries behind a port',
-    arity: RegistryArity::PickOne,
     onDuplicate: OnDuplicate::Supersede,
+    description: 'entries behind a port',
 )]
 class DeepReadPortRegistry implements Gated, Registry
 {
@@ -253,9 +250,8 @@ it('asks a store that carries its declaration, so an external-store registry can
     $index->describe(new ExternalStoreRegistry(
         new IsRegistry(
             root: 'schemas.served',
-            of: 'schema artifacts on disk',
-            arity: RegistryArity::PickOne,
             onDuplicate: OnDuplicate::Supersede,
+            description: 'schema artifacts on disk',
         ),
         ['schemas.served.grounding' => 'the grounding schema'],
     ));
@@ -268,9 +264,8 @@ it('lets two instances of ONE class declare two different roots — the rung dis
     $index = new RegistryIndex;
     $declare = fn (string $root): IsRegistry => new IsRegistry(
         root: $root,
-        of: 'schema artifacts',
-        arity: RegistryArity::PickOne,
         onDuplicate: OnDuplicate::Supersede,
+        description: 'schema artifacts',
     );
 
     $index->describe(new ExternalStoreRegistry($declare('schemas.file'), []));
@@ -341,9 +336,8 @@ it('filters both registrant reads, because an unfiltered one is an existence ora
 it('answers the FIRST registrant at an Admit key rather than throwing, unlike resolve()', function () {
     $store = (new BasicRegistry(new IsRegistry(
         root: 'demo.admit',
-        of: 'test entries',
-        arity: RegistryArity::RunAll,
         onDuplicate: OnDuplicate::Admit,
+        description: 'test entries',
     )))
         ->register('hook', 'first', by: 'package-a')
         ->register('hook', 'second', by: 'package-b');

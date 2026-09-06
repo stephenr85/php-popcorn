@@ -22,7 +22,7 @@ enum MissReason: string
      *
      * Reachable two ways, and they are different bugs: at an EXACT key only under
      * {@see \Rushing\Popcorn\Registries\OnDuplicate::Admit}, and at a PREFIX key under any policy,
-     * when `resolve()` names a branch rather than a leaf. Only ever under `PickOne`.
+     * when `resolve()` names a branch rather than a leaf.
      */
     case Ambiguous = 'ambiguous';
 

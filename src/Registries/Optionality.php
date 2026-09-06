@@ -3,22 +3,15 @@
 namespace Rushing\Popcorn\Registries;
 
 /**
- * Is an EMPTY registry an error? A separate axis from `RegistryArity` (relocating here from
- * `laravel-beam` under ticket 21), which answers only "how many entries does a read engage".
+ * Whether an empty registry is expected. Independent of duplicate handling.
  *
- * The split is OSGi's, and it is not a refinement — Declarative Services spells its reference
- * cardinality `optionality '..' multiplicity` and states flatly that **"the multiplicity is
- * irrelevant for the satisfaction of the reference"**. Spring is the counter-example: it requires
- * at least one matching element for a declared array/collection/map, *except* at constructors —
- * an inconsistency that exists precisely because the two axes were never named apart.
- *
- * Orthogonal to arity and to {@see OnDuplicate} in every combination; there are no meaningless
- * pairings to publish here (registry-kernel ticket 06, rule 4).
+ * Emptiness is runtime state. A required registry reports an unpopulated miss from `resolve()`;
+ * diagnostic audits can also report it. Other reads retain their ordinary empty results.
  */
 enum Optionality: string
 {
     /**
-     * Empty is a bug. A read against a registry with no entries throws
+     * Empty is a bug. `resolve()` against a registry with no entries throws
      * {@see Exceptions\RegistryMiss} with {@see Exceptions\MissReason::Unpopulated}, and a
      * NON-gating doctor audit reports the condition before anyone trips it in production.
      *
@@ -29,7 +22,7 @@ enum Optionality: string
     case Required = 'required';
 
     /**
-     * Empty is normal. A `RunAll` registry with no listeners is the common case, not a defect.
+     * Empty is normal, such as a registry of listeners with none registered.
      */
     case Optional = 'optional';
 }

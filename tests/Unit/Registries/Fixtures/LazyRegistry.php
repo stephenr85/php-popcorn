@@ -7,7 +7,6 @@ use Rushing\Popcorn\Registries\BasicRegistry;
 use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Registry;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Registries\RegistryKey;
 
 /**
@@ -23,8 +22,7 @@ use Rushing\Popcorn\Registries\RegistryKey;
  */
 #[IsRegistry(
     root: 'lazy.demo',
-    of: 'test entries, resolved on demand',
-    arity: RegistryArity::PickOne,
+    description: 'test entries, resolved on demand',
 )]
 class LazyRegistry implements Gated, Registry
 {

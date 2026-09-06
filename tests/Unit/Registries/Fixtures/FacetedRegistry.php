@@ -6,7 +6,6 @@ use Rushing\Popcorn\Registries\Authorizer;
 use Rushing\Popcorn\Registries\Faceted;
 use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\IsRegistry;
-use Rushing\Popcorn\Registries\RegistryArity;
 
 /**
  * A single-axis faceted registry, modelled on `LensRegistry` — entries carry a tier that classifies
@@ -15,8 +14,7 @@ use Rushing\Popcorn\Registries\RegistryArity;
  */
 #[IsRegistry(
     root: 'schemas.lenses',
-    of: 'test lenses, for the Faceted suite',
-    arity: RegistryArity::RunAll,
+    description: 'test lenses, for the Faceted suite',
 )]
 class FacetedRegistry implements Faceted, Gated
 {

@@ -44,8 +44,7 @@ namespace Rushing\Popcorn\Registries;
 interface CarriesDeclaration
 {
     /**
-     * What this instance declares it is — its root, what it is `of`, its arity, its duplicate policy
-     * and its optionality.
+     * The instance's root, entry type, policies, and optional description.
      *
      * Total, never null. A store that cannot answer should not implement this: an undeclared registry
      * is precisely what the gate exists to catch, and a null here would launder it into a default.

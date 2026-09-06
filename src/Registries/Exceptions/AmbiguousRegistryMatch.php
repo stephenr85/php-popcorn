@@ -13,7 +13,6 @@ namespace Rushing\Popcorn\Registries\Exceptions;
  * duplicate registration — catches this. Flattening the two would force every call site to inspect
  * a reason code to tell a typo from a collision.
  *
- * Only ever thrown under `PickOne`. Under `ComposeMany` and `RunAll`, several matches are the
- * answer rather than the error (registry-kernel ticket 06, rule 2).
+ * A single-entry read reports ambiguity when several entries match. `matches()` returns them all.
  */
 class AmbiguousRegistryMatch extends RegistryMiss {}

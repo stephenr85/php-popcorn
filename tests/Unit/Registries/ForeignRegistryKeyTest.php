@@ -7,7 +7,6 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\OnDuplicate;
 use Rushing\Popcorn\Registries\Optionality;
-use Rushing\Popcorn\Registries\RegistryArity;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey;
 
 /**
@@ -28,10 +27,9 @@ function uriRegistry(OnDuplicate $onDuplicate = OnDuplicate::Supersede): BasicRe
 {
     return new BasicRegistry(new IsRegistry(
         root: 'jsonns.namespaces',
-        of: 'namespace handlers',
-        arity: RegistryArity::PickOne,
         onDuplicate: $onDuplicate,
         optionality: Optionality::Optional,
+        description: 'namespace handlers',
     ));
 }
 
