@@ -7,7 +7,7 @@ use Rushing\Popcorn\Registries\RegistryKey;
 
 /**
  * `register()` was offered a key that is already taken, on a registry declaring
- * {@see \Rushing\Popcorn\Registries\OnDuplicate::Reject}.
+ * {@see \Rushing\Popcorn\Registries\OnKeyDuplicate::Reject}.
  *
  * NOT a {@see RegistryMiss} — nothing was missed; this is a write refused, at write time. It is a
  * sibling of {@see InvalidRegistryKey} under `RuntimeException`, following the per-family-base house

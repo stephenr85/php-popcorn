@@ -44,7 +44,7 @@ namespace Rushing\Popcorn\Registries;
  *
  * Registrars run when they are attached, and an owner attaches in its own `boot()` — before consumer
  * providers boot and hand-register. Explicit registration therefore lands second and wins by
- * {@see OnDuplicate::Supersede} alone, with no tier, no branch and no precedence rule (ticket 07 D9).
+ * {@see OnKeyDuplicate::Supersede} alone, with no tier, no branch and no precedence rule (ticket 07 D9).
  * Lazy-on-first-read would invert exactly that and let config beat explicit registration.
  *
  * ## What a registrar writes is serialisable — where its projection returns data

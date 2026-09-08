@@ -15,7 +15,7 @@ namespace Rushing\Popcorn\Registries;
  * That basename reduction is lossy, and the loss is not theoretical. Measured across the splicewire
  * estate on 2026-08-27: **487 distinct `*Data` class basenames, 17 of which name more than one class**
  * (34 classes — `SyncData`, `ThreadData`, `ThreadMessageData`, `UserData`, `PlanData` among them).
- * Under {@see OnDuplicate::Supersede} two such classes collide **silently**: the second registrant
+ * Under {@see OnKeyDuplicate::Supersede} two such classes collide **silently**: the second registrant
  * wins, and {@see RecordsSupersession::superseded()} records it as a legitimate override rather than
  * an accident, because at that point nothing can tell the two apart. Carrying the namespace makes the
  * collision unrepresentable rather than merely unlikely.

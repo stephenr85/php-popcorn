@@ -5,7 +5,7 @@ namespace Rushing\Popcorn\Registries;
 /**
  * One displaced entry: what was at a key before someone wrote over it.
  *
- * Recorded whenever {@see OnDuplicate::Supersede} overwrites, and **never resolved** — a superseded
+ * Recorded whenever {@see OnKeyDuplicate::Supersede} overwrites, and **never resolved** — a superseded
  * entry is history, and history must not participate in a read. Otherwise "several entries under one
  * key" and "one entry overridden twice" become the same thing, and every enumeration starts
  * running dead entries (registry-kernel ticket 01 D9).

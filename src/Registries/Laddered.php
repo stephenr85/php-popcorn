@@ -15,7 +15,7 @@ namespace Rushing\Popcorn\Registries;
  * This docblock said *"a registry whose own resolve()"* until registry-kernel ticket 57, and that was
  * falsified by **ticket 44 D0**, which ruled `Splicewire\Tower\Circuit\Capabilities\CapabilityLadder`
  * out of the registry population *while it declares this interface*. 44 corrected two other docblocks
- * that had leaned on the same false inference ({@see OnDuplicate::Admit} here in the kernel, and beam's
+ * that had leaned on the same false inference ({@see OnKeyDuplicate::Admit} here in the kernel, and beam's
  * `RegistryConformanceAudit`); this is the third, and it is the one that matters most, because an audit
  * now reads it.
  *

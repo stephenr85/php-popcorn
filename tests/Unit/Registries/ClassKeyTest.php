@@ -5,8 +5,8 @@ use Rushing\Popcorn\Registries\ClassKey;
 use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 
 /**
  * A class name as a key, carrying its NAMESPACE.
@@ -15,7 +15,7 @@ use Rushing\Popcorn\Registries\Optionality;
  * only — its own docblock says `Splicewire\Beam\Realm\RealmRegistry` becomes the single segment
  * `realm-registry`. Measured across the splicewire estate on 2026-08-27: **487 distinct `*Data` class
  * basenames, 17 of which name more than one class** (34 classes; `SyncData`, `ThreadData`, `UserData`
- * and `PlanData` among them). Under {@see OnDuplicate::Supersede} those collide SILENTLY — the second
+ * and `PlanData` among them). Under {@see OnKeyDuplicate::Supersede} those collide SILENTLY — the second
  * registrant wins and `superseded()` records it as a legitimate override rather than an accident.
  *
  * This type makes that collision unrepresentable instead of merely unlikely. It is a CONSTRUCTOR, not
@@ -28,8 +28,8 @@ function classKeyRegistry(): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: 'schemas.fixtures',
-        onDuplicate: OnDuplicate::Supersede,
-        optionality: Optionality::Optional,
+        onKeyDuplicate: OnKeyDuplicate::Supersede,
+        populationRequirement: PopulationRequirement::Optional,
         description: 'fixtures keyed by declaring class',
     ));
 }

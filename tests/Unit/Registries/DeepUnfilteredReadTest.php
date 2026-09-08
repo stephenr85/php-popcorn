@@ -6,7 +6,7 @@ use Rushing\Popcorn\Registries\CarriesDeclaration;
 use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Nested;
-use Rushing\Popcorn\Registries\OnDuplicate;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
 use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryIndex;
 use Rushing\Popcorn\Registries\RegistryKey;
@@ -33,7 +33,7 @@ function gatedStore(string $root): BasicRegistry
 {
     return (new BasicRegistry(new IsRegistry(
         root: $root,
-        onDuplicate: OnDuplicate::Supersede,
+        onKeyDuplicate: OnKeyDuplicate::Supersede,
         description: 'test entries',
     )))
         ->register('open', 'visible to everyone')
@@ -57,7 +57,7 @@ function denyEverything(): Authorizer
  */
 #[IsRegistry(
     root: 'demo.port',
-    onDuplicate: OnDuplicate::Supersede,
+    onKeyDuplicate: OnKeyDuplicate::Supersede,
     description: 'entries behind a port',
 )]
 class DeepReadPortRegistry implements Gated, Registry
@@ -250,7 +250,7 @@ it('asks a store that carries its declaration, so an external-store registry can
     $index->describe(new ExternalStoreRegistry(
         new IsRegistry(
             root: 'schemas.served',
-            onDuplicate: OnDuplicate::Supersede,
+            onKeyDuplicate: OnKeyDuplicate::Supersede,
             description: 'schema artifacts on disk',
         ),
         ['schemas.served.grounding' => 'the grounding schema'],
@@ -264,7 +264,7 @@ it('lets two instances of ONE class declare two different roots — the rung dis
     $index = new RegistryIndex;
     $declare = fn (string $root): IsRegistry => new IsRegistry(
         root: $root,
-        onDuplicate: OnDuplicate::Supersede,
+        onKeyDuplicate: OnKeyDuplicate::Supersede,
         description: 'schema artifacts',
     );
 
@@ -336,7 +336,7 @@ it('filters both registrant reads, because an unfiltered one is an existence ora
 it('answers the FIRST registrant at an Admit key rather than throwing, unlike resolve()', function () {
     $store = (new BasicRegistry(new IsRegistry(
         root: 'demo.admit',
-        onDuplicate: OnDuplicate::Admit,
+        onKeyDuplicate: OnKeyDuplicate::Admit,
         description: 'test entries',
     )))
         ->register('hook', 'first', by: 'package-a')

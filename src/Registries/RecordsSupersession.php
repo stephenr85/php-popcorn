@@ -5,7 +5,7 @@ namespace Rushing\Popcorn\Registries;
 /**
  * A registry that can be asked what it overwrote.
  *
- * The recording is **always on** wherever {@see OnDuplicate::Supersede} is declared — this interface
+ * The recording is **always on** wherever {@see OnKeyDuplicate::Supersede} is declared — this interface
  * exposes the record; it does not switch it on. Under `Reject` nothing is ever displaced, and under
  * `Admit` both entries stay live, so on those two the answer is legitimately always empty
  * (registry-kernel ticket 01 D9).

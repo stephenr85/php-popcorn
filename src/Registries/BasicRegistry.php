@@ -40,12 +40,12 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * Entries are held as an ordered list of records rather than a `[key => entry]` map, and that is the
  * decision that makes {@see Registry::matches()}'s ordering guarantee free rather than a sort:
  * registration order IS the ordering key, so there is no `rank` field able to disagree with it. It is
- * also what lets {@see OnDuplicate::Admit} keep two live entries under one key without a nested-array
+ * also what lets {@see OnKeyDuplicate::Admit} keep two live entries under one key without a nested-array
  * special case.
  *
  * "Registration order" means the order a key was **first** registered in, not the order it was last
  * written in: a supersession replaces the entry in its slot and does not move it to the end
- * (registry-kernel ticket 62, argued on {@see OnDuplicate::Supersede}). The record's `position` field
+ * (registry-kernel ticket 62, argued on {@see OnKeyDuplicate::Supersede}). The record's `position` field
  * carries that slot and is what {@see matches()} sorts on; `sequence` stays the record's identity and
  * its registration time. The two are equal for everything that is never superseded, which is almost
  * everything.
@@ -231,7 +231,7 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
      *
      * The eagerness is {@see Filled}'s decision, and holding it here rather than in each owner is what
      * makes it uniform: an owner that composes a `BasicRegistry` gets ticket 07 D9's ordering — attach
-     * at boot, hand-register later, later wins by {@see OnDuplicate::Supersede} — without writing a line
+     * at boot, hand-register later, later wins by {@see OnKeyDuplicate::Supersede} — without writing a line
      * of it.
      */
     public function attach(Registrar $registrar): void
@@ -251,7 +251,7 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
      * Write an entry, applying the declared duplicate policy.
      *
      * A supersession lands **in the displaced entry's slot** rather than at the end — registry-kernel
-     * ticket 62, and see {@see OnDuplicate::Supersede} for why. That is what `$slot` is doing here: the
+     * ticket 62, and see {@see OnKeyDuplicate::Supersede} for why. That is what `$slot` is doing here: the
      * new record inherits the displaced record's `position` and is spliced back into the same index,
      * so the store's array order stays identical to its position order and every read that walks
      * `$this->entries` in natural order (`keys()`, `relativeKeys()`, `descendants()`, `unfiltered()`)
@@ -271,10 +271,10 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
         $slot = null;
         $position = $this->sequence;
 
-        if ($this->declaration->onDuplicate !== OnDuplicate::Admit) {
+        if ($this->declaration->onKeyDuplicate !== OnKeyDuplicate::Admit) {
             $occupant = $this->recordAt($key);
 
-            if ($occupant !== null && $this->declaration->onDuplicate === OnDuplicate::Reject) {
+            if ($occupant !== null && $this->declaration->onKeyDuplicate === OnKeyDuplicate::Reject) {
                 throw DuplicateRegistryKey::for((string) $key, $by, $occupant['by']);
             }
 
@@ -314,7 +314,7 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
     {
         $key = $this->door($key);
 
-        if ($this->entries === [] && $this->declaration->optionality === Optionality::Required) {
+        if ($this->entries === [] && $this->declaration->populationRequirement === PopulationRequirement::Required) {
             throw RegistryMiss::unpopulated((string) $key, $this->declaration->root);
         }
 

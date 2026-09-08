@@ -8,7 +8,7 @@ namespace Rushing\Popcorn\Registries;
  * Emptiness is runtime state. A required registry reports an unpopulated miss from `resolve()`;
  * diagnostic audits can also report it. Other reads retain their ordinary empty results.
  */
-enum Optionality: string
+enum PopulationRequirement: string
 {
     /**
      * Empty is a bug. `resolve()` against a registry with no entries throws

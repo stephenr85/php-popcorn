@@ -5,8 +5,8 @@ use Rushing\Popcorn\Registries\BranchKey;
 use Rushing\Popcorn\Registries\Exceptions\MissReason;
 use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
 use Rushing\Popcorn\Registries\IsRegistry;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey;
 
 /**
@@ -23,12 +23,12 @@ use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey;
  *
  * The rule they pin: the kernel COMPARES and JOINS segments and never parses one.
  */
-function uriRegistry(OnDuplicate $onDuplicate = OnDuplicate::Supersede): BasicRegistry
+function uriRegistry(OnKeyDuplicate $onKeyDuplicate = OnKeyDuplicate::Supersede): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: 'jsonns.namespaces',
-        onDuplicate: $onDuplicate,
-        optionality: Optionality::Optional,
+        onKeyDuplicate: $onKeyDuplicate,
+        populationRequirement: PopulationRequirement::Optional,
         description: 'namespace handlers',
     ));
 }
@@ -61,7 +61,7 @@ it('misses on a foreign key with a RegistryMiss, never an InvalidRegistryKey', f
 });
 
 it('defines equality on segments and never on the rendered string', function () {
-    $registry = uriRegistry(OnDuplicate::Reject);
+    $registry = uriRegistry(OnKeyDuplicate::Reject);
 
     $registry->register(NamespaceUriKey::of('https://schemastud.dev/ns/grounding/2'), 'first', by: 'a');
 

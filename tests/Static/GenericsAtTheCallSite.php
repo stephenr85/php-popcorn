@@ -4,8 +4,8 @@ namespace Tests\Static;
 
 use Rushing\Popcorn\Registries\BasicRegistry;
 use Rushing\Popcorn\Registries\IsRegistry;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryIndex;
 
@@ -49,8 +49,8 @@ interface ResourceRegistry extends Registry {}
 #[IsRegistry(
     root: 'popcorn.static-fixture.resources',
     entryType: ResourceDefinition::class,
-    onDuplicate: OnDuplicate::Supersede,
-    optionality: Optionality::Optional,
+    onKeyDuplicate: OnKeyDuplicate::Supersede,
+    populationRequirement: PopulationRequirement::Optional,
     description: 'resource definitions, for the generics fixture',
 )]
 class ComposedResourceRegistry

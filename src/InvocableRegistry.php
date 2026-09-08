@@ -13,8 +13,8 @@ use Rushing\Popcorn\Registries\HasRegistryKey;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\Nested;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Registries\RegistryNode;
@@ -61,8 +61,8 @@ use Rushing\Popcorn\Registries\RegistryNode;
 #[IsRegistry(
     root: 'popcorn.invocables',
     entryType: Invocable::class,
-    onDuplicate: OnDuplicate::Supersede,
-    optionality: Optionality::Optional,
+    onKeyDuplicate: OnKeyDuplicate::Supersede,
+    populationRequirement: PopulationRequirement::Optional,
     description: 'named, transport-agnostic capabilities — array in, array out. Duplicate names are the swap seam, not an accident: re-registering a name overrides the prior binding, so a package default swaps for a host- or tenant-specific one without any caller changing. Live case: `Rushing\\PrismPlus\\PrismPlusManager::register()`, whose own capability registries are seeded with built-in providers a host then overrides by name.',
 )]
 class InvocableRegistry implements Forgettable, Gated, Nested, Registry

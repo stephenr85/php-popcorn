@@ -32,7 +32,7 @@ interface Filled
      *
      * Eager, and the eagerness is the decision (ticket 07 D9). An owner attaches in its own `boot()`,
      * which Laravel runs before the consumer providers that hand-register — so an explicit registration
-     * lands after a registrar's and wins by {@see OnDuplicate::Supersede}, with no tier and no
+     * lands after a registrar's and wins by {@see OnKeyDuplicate::Supersede}, with no tier and no
      * precedence rule to maintain. That reproduces the estate's existing explicit-wins semantics by
      * ordering alone.
      *

@@ -19,7 +19,7 @@ use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\SelfKeyingEntry;
  * The two assertions that carry the most weight are not about a registrar's own behaviour: that a
  * registrar always names its registrant (D13, because a `null` there silently degrades the miss
  * diagnostics and the supersession record), and that attach-then-hand-register leaves the
- * hand-registered entry winning by `OnDuplicate::Supersede` alone (D9, the claim that dissolved
+ * hand-registered entry winning by `OnKeyDuplicate::Supersede` alone (D9, the claim that dissolved
  * ticket 19 — asserted here rather than argued in a paragraph).
  */
 function filled(string $root = 'beam.renderings'): BasicRegistry

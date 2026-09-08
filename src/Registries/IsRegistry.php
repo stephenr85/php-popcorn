@@ -23,16 +23,16 @@ class IsRegistry
     /**
      * @param  string  $root  the branch of the keyspace this registry owns
      * @param  string  $entryType  the entry type, or `'mixed'`
-     * @param  OnDuplicate  $onDuplicate  what `register()` does when the key is taken
-     * @param  Optionality  $optionality  whether `resolve()` reports an empty registry as unpopulated
+     * @param  OnKeyDuplicate  $onKeyDuplicate  what `register()` does when the key is taken
+     * @param  PopulationRequirement  $populationRequirement  whether `resolve()` reports an empty registry as unpopulated
      * @param  string|null  $description  optional context about the registry's purpose and use
      * @param  int  $order  display order, ascending; entry order is registration order
      */
     public function __construct(
         public string $root,
         public string $entryType = 'mixed',
-        public OnDuplicate $onDuplicate = OnDuplicate::Supersede,
-        public Optionality $optionality = Optionality::Optional,
+        public OnKeyDuplicate $onKeyDuplicate = OnKeyDuplicate::Supersede,
+        public PopulationRequirement $populationRequirement = PopulationRequirement::Optional,
         public ?string $description = null,
         public int $order = 100,
     ) {}

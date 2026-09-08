@@ -9,8 +9,8 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
 use Rushing\Popcorn\Registries\Gated;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryIndex;
 use Rushing\Popcorn\Registries\RegistryKey;
@@ -23,11 +23,11 @@ use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey;
  * call site, and that a foreign-keyed registry stays out of the global keyspace instead of being
  * quietly coerced into it.
  */
-function store(string $root, OnDuplicate $onDuplicate = OnDuplicate::Supersede): BasicRegistry
+function store(string $root, OnKeyDuplicate $onKeyDuplicate = OnKeyDuplicate::Supersede): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        onDuplicate: $onDuplicate,
+        onKeyDuplicate: $onKeyDuplicate,
         description: 'test entries',
     ));
 }
@@ -92,7 +92,7 @@ it('self-hosts under the zero-segment root, so Required is true by construction'
 
     expect($index)->toBeInstanceOf(Registry::class)
         ->and(IsRegistry::of($index)->root)->toBe('')
-        ->and(IsRegistry::of($index)->optionality)->toBe(Optionality::Required)
+        ->and(IsRegistry::of($index)->populationRequirement)->toBe(PopulationRequirement::Required)
         ->and($index->resolve(Key::root()))->toBe($index)
         ->and($index->owner(Key::root()))->toBe($index);
 });

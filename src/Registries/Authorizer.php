@@ -40,7 +40,7 @@ namespace Rushing\Popcorn\Registries;
  * hit cannot disagree about whether a key exists. An unfiltered `has()` would be an existence
  * oracle that undoes the whole policy through one boolean.
  *
- * Tooling that must see everything — the doctor, the {@see Optionality} audit, the surgeon gate —
+ * Tooling that must see everything — the doctor, the {@see PopulationRequirement} audit, the surgeon gate —
  * reads through the registry's explicit unfiltered accessor rather than through a special case
  * here. That path is artisan-only, under the estate's stated trusted-shell policy.
  *

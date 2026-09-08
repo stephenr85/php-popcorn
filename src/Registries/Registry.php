@@ -73,7 +73,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * would buy backward compatibility for a key no caller can be holding."*
  *
  * **The one live alias-shaped thing in the estate is not a registry-key alias.**
- * `CapabilityLadder::$overlayConduits` — the pool {@see OnDuplicate::Admit} cites for its
+ * `CapabilityLadder::$overlayConduits` — the pool {@see OnKeyDuplicate::Admit} cites for its
  * deterministic ambiguity refusal — resolves `{provider}:{alias}.{tool}` handles. Its alias is
  * per-tenant row data assigned by a user, namespaced by provider, uniqueness-enforced at a
  * connect-time DB chokepoint (`ConduitAliasRegistrar`), and its resolution additionally checks tool
@@ -81,7 +81,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * serve it. A one-instance shape that is not even an instance is not a two-beneficiary case.
  *
  * **And the design has a cost the proposal does not price.** Ticket 66's *"enforce the same resolving
- * `entryType`"* is the easy half; the hard half is {@see OnDuplicate}. The prior-art survey found
+ * `entryType`"* is the easy half; the hard half is {@see OnKeyDuplicate}. The prior-art survey found
  * systemd and NixOS reaching the same answer independently — systemd loads drop-ins for *"the aliased
  * name and all aliases"*, and NixOS's `mkRenamedOptionModule` wraps aliased definitions in `mkMerge`,
  * documenting that *"'to' Options whose types don't support merging … are not well-supported"*. So
@@ -99,7 +99,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  *
  * ## Declaration is an attribute, not a method
  *
- * A registry declares its root, entry type, duplicate policy, optionality, and optional description
+ * A registry declares its root, entry type, duplicate policy, population requirement, and optional description
  * through {@see IsRegistry} on the class — the only mechanism a static walk can read without booting,
  * which is what lets the surgeon gate check conformance (ticket 01 §4, ticket 14).
  *
@@ -120,7 +120,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * - **A filtered read is never cacheable.** It is per-actor by construction; a registrar's cache sits
  *   UNDER this seam, never over it (ticket 09 D5).
  *
- * Tooling that must see everything — the doctor, the {@see Optionality} audit, the surgeon gate — reads
+ * Tooling that must see everything — the doctor, the {@see PopulationRequirement} audit, the surgeon gate — reads
  * through {@see unfiltered()} rather than through a hidden special case. The authorizer itself is
  * installed once, on the index, not per registry: per-registry means a registry that forgets to wire it
  * is silently open (ticket 09 D7; the attachment point is ticket 20's).
@@ -167,12 +167,12 @@ interface Registry
      * closure with no class to hang one on (ticket 09 D13). `null` ⇒ ungated, and ungated entries never
      * reach the authorizer at all.
      *
-     * What a duplicate key does is declared per registry via {@see OnDuplicate}, not chosen here — the
+     * What a duplicate key does is declared per registry via {@see OnKeyDuplicate}, not chosen here — the
      * estate ships all three behaviours with argued docblocks.
      *
      * @param  TEntry  $entry
      *
-     * @throws DuplicateRegistryKey under {@see OnDuplicate::Reject}
+     * @throws DuplicateRegistryKey under {@see OnKeyDuplicate::Reject}
      */
     public function register(RegistryKey|string $key, mixed $entry, ?string $by = null, ?string $ability = null): static;
 
@@ -260,7 +260,7 @@ interface Registry
 
     /**
      * The same registry with no authorizer — the explicit, named, public escape for the doctor, the
-     * `Optionality` audit and the surgeon gate (ticket 09 D11).
+     * `PopulationRequirement` audit and the surgeon gate (ticket 09 D11).
      *
      * Blunt on purpose. The rejected alternative was an implicit rule ("filter only when an actor is
      * present"), which makes the security-relevant behaviour depend on ambient state nobody can see at

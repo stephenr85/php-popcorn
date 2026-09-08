@@ -3,7 +3,7 @@
 namespace Rushing\Popcorn\Tests\Unit\Registries\Fixtures;
 
 use Rushing\Popcorn\Registries\IsRegistry;
-use Rushing\Popcorn\Registries\OnDuplicate;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
 
 /**
  * The other half of *nearest wins*: a subclass taking its own branch of the keyspace by declaring one.
@@ -16,7 +16,7 @@ use Rushing\Popcorn\Registries\OnDuplicate;
 #[IsRegistry(
     root: 'beam.overrides',
     entryType: 'int',
-    onDuplicate: OnDuplicate::Admit,
+    onKeyDuplicate: OnKeyDuplicate::Admit,
     description: 'test entries, for the subclass-declares case',
 )]
 class OverridingRegistry extends DeclaredRegistry {}

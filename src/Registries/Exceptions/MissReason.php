@@ -21,13 +21,13 @@ enum MissReason: string
      * Entries exist but no single one answers — resolving would be a coin-flip.
      *
      * Reachable two ways, and they are different bugs: at an EXACT key only under
-     * {@see \Rushing\Popcorn\Registries\OnDuplicate::Admit}, and at a PREFIX key under any policy,
+     * {@see \Rushing\Popcorn\Registries\OnKeyDuplicate::Admit}, and at a PREFIX key under any policy,
      * when `resolve()` names a branch rather than a leaf.
      */
     case Ambiguous = 'ambiguous';
 
     /**
-     * The registry declares itself `Optionality::Required` and is empty — nobody registered
+     * The registry declares itself `PopulationRequirement::Required` and is empty — nobody registered
      * anything. Deliberately distinct from `Absent`: "your key isn't in here" and "there is no
      * *here* yet" have different causes and different fixes, and collapsing them is how a missing
      * service provider gets misread as a typo.

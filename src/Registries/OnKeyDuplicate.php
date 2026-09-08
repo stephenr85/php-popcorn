@@ -13,7 +13,7 @@ namespace Rushing\Popcorn\Registries;
  * Spring `@Primary`, OSGi `service.ranking`, systemd load-order. None of them made it a per-call
  * flag, and neither does this — the call site chooses only cardinality, by which method it calls.
  */
-enum OnDuplicate: string
+enum OnKeyDuplicate: string
 {
     /**
      * Last write wins; the displaced entry is recorded as `Superseded` and NEVER fed to a read.

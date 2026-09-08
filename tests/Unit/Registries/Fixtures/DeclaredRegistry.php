@@ -3,8 +3,8 @@
 namespace Rushing\Popcorn\Tests\Unit\Registries\Fixtures;
 
 use Rushing\Popcorn\Registries\IsRegistry;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 
 /**
  * A registry declaring itself the way the estate's will — the attribute on the OWNER, the store held
@@ -14,8 +14,8 @@ use Rushing\Popcorn\Registries\Optionality;
 #[IsRegistry(
     root: 'beam.resources',
     entryType: 'string',
-    onDuplicate: OnDuplicate::Reject,
-    optionality: Optionality::Required,
+    onKeyDuplicate: OnKeyDuplicate::Reject,
+    populationRequirement: PopulationRequirement::Required,
     description: 'test entries, for the contract suite',
 )]
 class DeclaredRegistry {}

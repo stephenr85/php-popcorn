@@ -5,8 +5,8 @@ use Rushing\Popcorn\Registries\BasicRegistry;
 use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 use Rushing\Popcorn\Registries\RelativeUriKey;
 use Rushing\Popcorn\Registries\Rootable;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\NamespaceUriKey as ConsumerOwnedKey;
@@ -25,8 +25,8 @@ function uriKeyRegistry(string $root = 'nav.kinds'): BasicRegistry
 {
     return new BasicRegistry(new IsRegistry(
         root: $root,
-        onDuplicate: OnDuplicate::Supersede,
-        optionality: Optionality::Optional,
+        onKeyDuplicate: OnKeyDuplicate::Supersede,
+        populationRequirement: PopulationRequirement::Optional,
         description: 'nav kinds',
     ));
 }

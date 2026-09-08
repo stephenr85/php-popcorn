@@ -11,8 +11,8 @@ use Rushing\Popcorn\Registries\Forgettable;
 use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\Key;
 use Rushing\Popcorn\Registries\Nested;
-use Rushing\Popcorn\Registries\OnDuplicate;
-use Rushing\Popcorn\Registries\Optionality;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 use Rushing\Popcorn\Registries\Registry;
 use Rushing\Popcorn\Registries\RegistryKey;
 use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\DeclaredRegistry;
@@ -28,14 +28,14 @@ use Rushing\Popcorn\Tests\Unit\Registries\Fixtures\UndeclaredRegistry;
  * never reaches the authorizer at all.
  */
 function registry(
-    OnDuplicate $onDuplicate = OnDuplicate::Supersede,
-    Optionality $optionality = Optionality::Optional,
+    OnKeyDuplicate $onKeyDuplicate = OnKeyDuplicate::Supersede,
+    PopulationRequirement $populationRequirement = PopulationRequirement::Optional,
 ): BasicRegistry {
     return new BasicRegistry(new IsRegistry(
         root: 'beam.resources',
         description: 'test entries',
-        onDuplicate: $onDuplicate,
-        optionality: $optionality,
+        onKeyDuplicate: $onKeyDuplicate,
+        populationRequirement: $populationRequirement,
     ));
 }
 
@@ -83,15 +83,15 @@ it('allows a declaration with only a root', function () {
 
     expect($declaration->entryType)->toBe('mixed')
         ->and($declaration->description)->toBeNull()
-        ->and($declaration->onDuplicate)->toBe(OnDuplicate::Supersede)
-        ->and($declaration->optionality)->toBe(Optionality::Optional);
+        ->and($declaration->onKeyDuplicate)->toBe(OnKeyDuplicate::Supersede)
+        ->and($declaration->populationRequirement)->toBe(PopulationRequirement::Optional);
 });
 
-it('reaches OnDuplicate and Optionality as declared registry properties, not just loose enums', function () {
+it('reaches OnKeyDuplicate and PopulationRequirement as declared registry properties, not just loose enums', function () {
     $store = BasicRegistry::for(DeclaredRegistry::class);
 
-    expect($store->declaration()->onDuplicate)->toBe(OnDuplicate::Reject)
-        ->and($store->declaration()->optionality)->toBe(Optionality::Required)
+    expect($store->declaration()->onKeyDuplicate)->toBe(OnKeyDuplicate::Reject)
+        ->and($store->declaration()->populationRequirement)->toBe(PopulationRequirement::Required)
         ->and($store->root())->toBe('beam.resources');
 });
 
@@ -105,7 +105,7 @@ it('walks up to the nearest declaration, so an undeclaring subclass inherits its
 
     expect($declaration->root)->toBe('beam.resources')
         ->and($declaration->description)->toBe('test entries, for the contract suite')
-        ->and($declaration->onDuplicate)->toBe(OnDuplicate::Reject)
+        ->and($declaration->onKeyDuplicate)->toBe(OnKeyDuplicate::Reject)
         // The fatal half ticket 28 found in laravel-graphine's own suite: this line threw.
         ->and(BasicRegistry::for(InheritingRegistry::class)->root())->toBe('beam.resources');
 });
@@ -116,9 +116,9 @@ it('lets the NEAREST declaration win, so a subclass still takes its own branch b
     expect($declaration->root)->toBe('beam.overrides')
         ->and($declaration->description)->toBe('test entries, for the subclass-declares case')
         ->and($declaration->entryType)->toBe('int')
-        ->and($declaration->onDuplicate)->toBe(OnDuplicate::Admit)
-        // Nothing is merged: the parent's non-default Optionality does not leak through the override.
-        ->and($declaration->optionality)->toBe(Optionality::Optional)
+        ->and($declaration->onKeyDuplicate)->toBe(OnKeyDuplicate::Admit)
+        // Nothing is merged: the parent's non-default PopulationRequirement does not leak through the override.
+        ->and($declaration->populationRequirement)->toBe(PopulationRequirement::Optional)
         ->and(BasicRegistry::for(OverridingRegistry::class)->root())->toBe('beam.overrides');
 });
 
@@ -139,7 +139,7 @@ it('refuses to compose a store for a class that declares nothing, rather than in
 });
 
 it('round-trips the registrant into the miss diagnostics', function () {
-    $store = registry(OnDuplicate::Admit)
+    $store = registry(OnKeyDuplicate::Admit)
         ->register('beam.resources.order', 'a', by: 'splicewire/laravel-beam')
         ->register('beam.resources.order', 'b', by: 'rushing/laravel-commerce');
 
@@ -164,7 +164,7 @@ it('throws a miss for an absent key and returns null from tryResolve', function 
 
 it('distinguishes an empty Required registry from a bad key', function () {
     try {
-        registry(optionality: Optionality::Required)->resolve('beam.resources.order');
+        registry(populationRequirement: PopulationRequirement::Required)->resolve('beam.resources.order');
         $this->fail('expected an unpopulated miss');
     } catch (RegistryMiss $miss) {
         expect($miss->reason)->toBe(MissReason::Unpopulated);
@@ -172,7 +172,7 @@ it('distinguishes an empty Required registry from a bad key', function () {
 });
 
 it('makes ambiguity reachable at an EXACT key only under Admit', function () {
-    $admit = registry(OnDuplicate::Admit)
+    $admit = registry(OnKeyDuplicate::Admit)
         ->register('beam.resources.order', 'a')
         ->register('beam.resources.order', 'b');
 
@@ -185,7 +185,7 @@ it('makes ambiguity reachable at an EXACT key only under Admit', function () {
 });
 
 it('refuses a duplicate at write time under Reject, naming both registrants', function () {
-    $store = registry(OnDuplicate::Reject)->register('beam.resources.order', 'a', by: 'splicewire/laravel-beam');
+    $store = registry(OnKeyDuplicate::Reject)->register('beam.resources.order', 'a', by: 'splicewire/laravel-beam');
 
     expect(fn () => $store->register('beam.resources.order', 'b', by: 'rushing/laravel-commerce'))
         ->toThrow(DuplicateRegistryKey::class, 'by splicewire/laravel-beam');
@@ -233,7 +233,7 @@ it('does not feed a superseded entry to a read, and records what it displaced', 
 
 /**
  * Registry-kernel ticket 62. The kernel shipped displace-then-append first, and a flagship realm test
- * caught it: re-registering the FIRST realm sent it to the back of `all()`. `OnDuplicate::Supersede`
+ * caught it: re-registering the FIRST realm sent it to the back of `all()`. `OnKeyDuplicate::Supersede`
  * now overrides in place, so "registration order" means the order of FIRST registration and a host
  * swapping one shipped default cannot silently re-sort a list it never touched.
  */
@@ -264,7 +264,7 @@ it('keeps the ORIGINAL slot when a key is superseded twice', function () {
 });
 
 it('gives an Admit duplicate its own slot, because nothing was replaced', function () {
-    $store = registry(OnDuplicate::Admit)
+    $store = registry(OnKeyDuplicate::Admit)
         ->register('beam.resources.operator', 'a')
         ->register('beam.resources.tenant', 'tenant')
         ->register('beam.resources.operator', 'b');
