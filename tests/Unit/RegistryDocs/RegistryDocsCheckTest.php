@@ -193,41 +193,70 @@ it('fails pages and manifest entries naming a root this package does not declare
         ->and($failures)->toContain('manifest names `docs.fixture.alpha.entry`, which no `#[IsRegistry]` in this package declares');
 });
 
-it('compares a page\'s facts block against a fresh declaration scan: in step passes, key order is not drift', function () {
-    $facts = RegistryFacts::of(IsRegistry::of(AlphaRegistry::class));
-    $reordered = array_reverse($facts, true);
-    $page = "---\ntitle: alpha\n---\n\n".str_replace(json_encode($facts, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), json_encode($reordered), RegistryFacts::block($facts))."\n\nProse.\n";
+function rdAlphaBlock(): string
+{
+    return RegistryFacts::render(IsRegistry::of(AlphaRegistry::class), AlphaRegistry::class);
+}
 
+it('renders the facts block byte-for-byte to the marker contract ticket 03 defined', function () {
+    // Pinned literally: ticket 03's `RegistryFactsBlock::render()` must produce these same bytes for
+    // this declaration, or the scaffold writes pages this check calls drifted.
+    expect(rdAlphaBlock())->toBe(implode("\n", [
+        '{/* registry-facts:start — generated from the #[IsRegistry] declaration by `splicewire:beam:docs:registries:scaffold`. Rerun the command; do not edit between these markers. */}',
+        '',
+        '- **Root:** `docs.fixture.alpha`',
+        '- **Entries:** `string`',
+        '- **Duplicate keys:** Reject — registering a taken key throws',
+        '- **Population:** Required — an empty registry is reported as unpopulated',
+        '- **Order:** `3` (display order, ascending)',
+        '- **Declared by:** `Rushing\Popcorn\Tests\Unit\RegistryDocs\Fixtures\AlphaRegistry`',
+        '',
+        '{/* registry-facts:end */}',
+    ]))->and(rdAlphaBlock())->not->toContain('authorial prose', 'the baked description is never a fact');
+});
+
+it('compares a page\'s facts block against a fresh rendering of the declaration: in step passes', function () {
     $report = rdCheck(rdPackage([
         ...rdPages('docs.fixture.beta', 'docs.fixture.gamma', 'docs.fixture.delta'),
-        'docs/registries/docs.fixture.alpha.mdx' => $page,
+        'docs/registries/docs.fixture.alpha.mdx' => "---\ntitle: alpha\n---\n\n# alpha\n\n".rdAlphaBlock()."\n\nProse the check never reads.\n",
     ]));
 
-    expect($facts)->toBe(['root' => 'docs.fixture.alpha', 'entryType' => 'string', 'onKeyDuplicate' => 'reject', 'populationRequirement' => 'required', 'order' => 3])
-        ->and($report->failures())->toBe([])
+    expect($report->failures())->toBe([])
         ->and($report->factsChecked)->toBe(1);
 });
 
 it('detects drift between a page\'s facts and the declaration, on an override page too', function () {
-    $stale = [...RegistryFacts::of(IsRegistry::of(AlphaRegistry::class)), 'order' => 2, 'description' => 'authorial prose, never a fact'];
-    unset($stale['populationRequirement']);
+    $stale = str_replace('- **Order:** `3`', '- **Order:** `2`', rdAlphaBlock());
+    $beta = str_replace(
+        ['docs.fixture.alpha', '`string`', 'Reject — registering a taken key throws', 'Required — an empty registry is reported as unpopulated', '`3`', 'AlphaRegistry'],
+        ['docs.fixture.beta', 'any value (`mixed`)', 'Reject — registering a taken key throws', 'Optional — an empty registry is normal', '`100`', 'BetaRegistry'],
+        rdAlphaBlock(),
+    ); // Beta declares Supersede; this page still says Reject
 
     $report = rdCheck(rdPackage([
         ...rdPages('docs.fixture.gamma', 'docs.fixture.delta'),
-        // Hand-written: block() renders only the declaration-fact keys, and this page must carry an extra one.
-        'docs/registries/docs.fixture.alpha.mdx' => "{/* registry-facts:begin */}\n```json\n".json_encode($stale)."\n```\n{/* registry-facts:end */}\n",
-        'docs/guides/beta.mdx' => RegistryFacts::block(['root' => 'docs.fixture.beta', 'entryType' => 'mixed', 'onKeyDuplicate' => 'reject', 'populationRequirement' => 'optional', 'order' => 100])."\n",
+        'docs/registries/docs.fixture.alpha.mdx' => $stale."\n",
+        'docs/guides/beta.mdx' => $beta."\n",
         ...rdManifest(['overrides' => ['docs.fixture.beta' => 'docs/guides/beta.mdx']]),
     ]));
 
     expect($report->drift)->toBe([
-        'docs/registries/docs.fixture.alpha.mdx (docs.fixture.alpha): facts drifted from the declaration: `populationRequirement` is missing (declaration says "required")',
-        'docs/registries/docs.fixture.alpha.mdx (docs.fixture.alpha): facts drifted from the declaration: `order`: page says 2, declaration says 3',
-        'docs/registries/docs.fixture.alpha.mdx (docs.fixture.alpha): facts drifted from the declaration: `description` is not a declaration fact (page says "authorial prose, never a fact")',
-        'docs/guides/beta.mdx (docs.fixture.beta): facts drifted from the declaration: `onKeyDuplicate`: page says "reject", declaration says "supersede"',
+        'docs/registries/docs.fixture.alpha.mdx (docs.fixture.alpha): facts drifted from the declaration: the declaration renders `- **Order:** `3` (display order, ascending)`, which the page lacks',
+        'docs/registries/docs.fixture.alpha.mdx (docs.fixture.alpha): facts drifted from the declaration: the page has `- **Order:** `2` (display order, ascending)`, which the declaration does not render',
+        'docs/guides/beta.mdx (docs.fixture.beta): facts drifted from the declaration: the declaration renders `- **Duplicate keys:** Supersede — a later registration under a taken key replaces the earlier entry, in its place`, which the page lacks',
+        'docs/guides/beta.mdx (docs.fixture.beta): facts drifted from the declaration: the page has `- **Duplicate keys:** Reject — registering a taken key throws`, which the declaration does not render',
     ])
         ->and($report->passes())->toBeFalse()
         ->and($report->factsChecked)->toBe(2);
+});
+
+it('calls a block drifted when only its whitespace differs', function () {
+    $report = rdCheck(rdPackage([
+        ...rdPages('docs.fixture.beta', 'docs.fixture.gamma', 'docs.fixture.delta'),
+        'docs/registries/docs.fixture.alpha.mdx' => str_replace("\n\n- **Root:**", "\n- **Root:**", rdAlphaBlock())."\n",
+    ]));
+
+    expect($report->drift)->toBe(['docs/registries/docs.fixture.alpha.mdx (docs.fixture.alpha): facts drifted from the declaration: the block differs from a fresh rendering in whitespace or line order']);
 });
 
 it('fails a malformed facts block and leaves a page without one unchecked', function (string $body, string $message) {
@@ -239,10 +268,10 @@ it('fails a malformed facts block and leaves a page without one unchecked', func
     expect(implode("\n", $report->failures()))->toContain("docs/registries/docs.fixture.alpha.mdx: malformed facts block: {$message}")
         ->and($report->factsChecked)->toBe(0);
 })->with([
-    'begin without end' => ["{/* registry-facts:begin */}\n```json\n{}\n```\n", 'expected exactly one begin and one end marker, found 1 begin and 0 end'],
-    'no json fence' => ["{/* registry-facts:begin */}\nroot: x\n{/* registry-facts:end */}\n", 'no fenced ```json block between the markers'],
-    'not json' => ["{/* registry-facts:begin */}\n```json\n{root: x\n```\n{/* registry-facts:end */}\n", 'the fenced block is not a JSON object'],
-    'end before begin' => ["{/* registry-facts:end */}\n{/* registry-facts:begin */}\n", 'the end marker comes before the begin marker'],
+    'start without end' => [RegistryFacts::START."\n- **Root:** `docs.fixture.alpha`\n", 'expected exactly one start and one end marker, found 1 start and 0 end'],
+    'end without start' => ["- **Root:** `docs.fixture.alpha`\n".RegistryFacts::END."\n", 'expected exactly one start and one end marker, found 0 start and 1 end'],
+    'two blocks' => [str_repeat(RegistryFacts::START."\n".RegistryFacts::END."\n", 2), 'expected exactly one start and one end marker, found 2 start and 2 end'],
+    'end before start' => [RegistryFacts::END."\n".RegistryFacts::START."\n", 'the end marker comes before the start marker'],
 ]);
 
 it('counts a page without a facts block as unchecked, not as drift', function () {
@@ -251,16 +280,17 @@ it('counts a page without a facts block as unchecked, not as drift', function ()
     expect($report->failures())->toBe([])->and($report->factsChecked)->toBe(0);
 });
 
-it('round-trips the canonical block through extract()', function () {
-    $facts = RegistryFacts::of(IsRegistry::of(AlphaRegistry::class));
+it('reads the rendered block back out of a page through extract() and read()', function () {
+    $page = "intro\n\n".rdAlphaBlock()."\n\nprose";
 
-    expect(RegistryFacts::extract("intro\n\n".RegistryFacts::block($facts)."\n\nprose"))->toBe(['state' => 'present', 'facts' => $facts])
-        ->and(RegistryFacts::extract('no block here'))->toBe(['state' => 'absent']);
+    expect(RegistryFacts::extract($page))->toBe(rdAlphaBlock())
+        ->and(RegistryFacts::read($page))->toBe(['state' => 'present', 'block' => rdAlphaBlock()])
+        ->and(RegistryFacts::read('no block here'))->toBe(['state' => 'absent']);
 });
 
 it('never writes: the package tree is byte-identical after a failing run', function () {
     $package = rdPackage([
-        'docs/registries/docs.fixture.alpha.mdx' => RegistryFacts::block(['root' => 'docs.fixture.alpha'])."\n",
+        'docs/registries/docs.fixture.alpha.mdx' => str_replace('`3`', '`4`', rdAlphaBlock())."\n",
         ...rdManifest(['exempt' => ['docs.fixture.gamma' => ['reason' => 'no class']]]),
     ]);
     $snapshot = fn (): array => array_map(

@@ -3,156 +3,148 @@
 namespace Rushing\Popcorn\Registries\Docs;
 
 use Rushing\Popcorn\Registries\IsRegistry;
+use Rushing\Popcorn\Registries\OnKeyDuplicate;
+use Rushing\Popcorn\Registries\PopulationRequirement;
 
 /**
- * The generated-facts block of a registry page and its marker contract (registry-docs ticket 01,
- * ruling 6; contract defined by ticket 04, which builds the drift check).
+ * The generated-facts block of a registry page: its renderer, its reader and the drift comparison
+ * (registry-docs ticket 01, ruling 6).
  *
- * ## The marker contract
+ * ## The marker contract, and where it comes from
  *
- * A page carries at most one block, written as two MDX comments around one fenced `json` block:
+ * Ticket 03 defines the block. Its scaffold command writes the pages, and its
+ * `Splicewire\Beam\Docs\Registries\RegistryFactsBlock` (in `splicewire/laravel-beam-docs`) was
+ * written framework-free so it could be lifted here as-is. Ticket 04 lifted {@see START}, {@see END},
+ * {@see render()} and {@see extract()} byte-for-byte, because the drift check passes only when both
+ * sides render identical bytes. The writer-only parts (`stub()`, `replaceIn()`, the description
+ * seed) stay with the scaffold command. **Once both tickets land, beam-docs' class should delegate
+ * these four members here**, so that one renderer serves both the writer and the check.
  *
- * ````mdx
- * {/* registry-facts:begin (generated; regenerate, never hand-edit) *\/}
- * ```json
- * {
- *     "root": "beam.particle.resources",
- *     "entryType": "Splicewire\\Beam\\Particles\\ParticleResource",
- *     "onKeyDuplicate": "supersede",
- *     "populationRequirement": "optional",
- *     "order": 100
- * }
- * ```
- * {/* registry-facts:end *\/}
- * ````
+ * - The block opens with exactly {@see START} and closes with the first {@see END} after it. Both
+ *   are MDX expression comments, because MDX 3 rejects `<!-- -->`.
+ * - Between the markers is a CommonMark list of DECLARATION FACTS ONLY: the root, the entry
+ *   contract, the duplicate policy, the population requirement, the order and the declaring class.
+ *   The baked `description` is authorial input and is never a fact.
+ * - **Drift means the page's block, markers included, is not byte-identical to a fresh
+ *   {@see render()} of the declaration.** {@see drift()} names the differing lines.
+ * - A page without {@see START} has no generated facts, and the check counts it as unchecked rather
+ *   than drifted. {@see START} with no {@see END} after it, a second {@see START}, or an {@see END}
+ *   with no {@see START} is malformed and fails the check.
  *
- * (`*\/` above is the docblock's escape for the comment's closing `*` and `/`; the page itself writes
- * them unescaped.)
- *
- * - The begin comment opens with `registry-facts:begin` and may carry trailing text. The end comment
- *   is exactly `registry-facts:end`.
- * - The JSON carries the {@see KEYS}: DECLARATION facts only, which are the root, the entry contract,
- *   the two policies (as enum values) and the order. The baked `description` is authorial input and
- *   is never a fact (ruling 6), so it is never in the block and never compared.
- * - Comparison is by decoded value, so key order and whitespace never count as drift. Missing keys,
- *   extra keys or changed values do.
- * - A page with no block has no generated facts to drift, and the check counts it as unchecked.
- *   A begin marker without an end, two blocks, or a block whose JSON does not decode is malformed
- *   and fails the check.
- *
- * {@see block()} renders the canonical text. A writer such as the scaffold command (ticket 03) renders
- * through it, so the writer and the check cannot disagree about the markers. This class only reads and
- * renders strings; it never writes a file.
+ * This class renders and reads strings. It never writes a file.
  */
 final class RegistryFacts
 {
-    public const BEGIN = 'registry-facts:begin';
+    public const START = '{/* registry-facts:start — generated from the #[IsRegistry] declaration by `splicewire:beam:docs:registries:scaffold`. Rerun the command; do not edit between these markers. */}';
 
-    public const END = 'registry-facts:end';
+    public const END = '{/* registry-facts:end */}';
 
-    /** The fact keys, in the order {@see block()} renders them. */
-    public const KEYS = ['root', 'entryType', 'onKeyDuplicate', 'populationRequirement', 'order'];
-
-    /**
-     * The fresh facts of one declaration.
-     *
-     * @return array{root: string, entryType: string, onKeyDuplicate: string, populationRequirement: string, order: int}
-     */
-    public static function of(IsRegistry $declaration): array
+    /** The block, markers included, for one declaration. Lifted verbatim from ticket 03's `RegistryFactsBlock::render()`. */
+    public static function render(IsRegistry $declaration, string $declaringClass): string
     {
-        return [
-            'root' => $declaration->root,
-            'entryType' => $declaration->entryType,
-            'onKeyDuplicate' => $declaration->onKeyDuplicate->value,
-            'populationRequirement' => $declaration->populationRequirement->value,
-            'order' => $declaration->order,
+        $rows = [
+            ['Root', self::code($declaration->root)],
+            ['Entries', $declaration->entryType === 'mixed' ? 'any value (`mixed`)' : self::code(ltrim($declaration->entryType, '\\'))],
+            ['Duplicate keys', self::duplicates($declaration->onKeyDuplicate)],
+            ['Population', self::population($declaration->populationRequirement)],
+            ['Order', self::code((string) $declaration->order).' (display order, ascending)'],
+            ['Declared by', self::code(ltrim($declaringClass, '\\'))],
         ];
-    }
 
-    /**
-     * The canonical block text for these facts, both markers included, with no trailing newline.
-     *
-     * @param  array<string, mixed>  $facts
-     */
-    public static function block(array $facts): string
-    {
-        $ordered = [];
+        // A CommonMark list, not a GFM table: the hosts' MDX pipelines run no remark-gfm, so a table
+        // would render as a paragraph of pipes.
+        $lines = [self::START, ''];
 
-        foreach (self::KEYS as $key) {
-            if (array_key_exists($key, $facts)) {
-                $ordered[$key] = $facts[$key];
-            }
+        foreach ($rows as [$fact, $value]) {
+            $lines[] = "- **{$fact}:** {$value}";
         }
 
-        return '{/* '.self::BEGIN.' (generated; regenerate, never hand-edit) */}'."\n"
-            ."```json\n"
-            .json_encode($ordered, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n"
-            ."```\n"
-            .'{/* '.self::END.' */}';
+        $lines[] = '';
+        $lines[] = self::END;
+
+        return implode("\n", $lines);
+    }
+
+    /** The block as it stands in `$contents`, markers included, or null. Lifted verbatim from ticket 03's `RegistryFactsBlock::extract()`. */
+    public static function extract(string $contents): ?string
+    {
+        $start = strpos($contents, self::START);
+        $end = $start === false ? false : strpos($contents, self::END, $start);
+
+        return $start === false || $end === false ? null : substr($contents, $start, $end + strlen(self::END) - $start);
     }
 
     /**
-     * Read the block out of a page's text.
+     * Read a page for the drift check: absent, malformed (and why), or present with its block.
      *
-     * @return array{state: 'absent'}|array{state: 'malformed', error: string}|array{state: 'present', facts: array<string, mixed>}
+     * @return array{state: 'absent'}|array{state: 'malformed', error: string}|array{state: 'present', block: string}
      */
-    public static function extract(string $page): array
+    public static function read(string $contents): array
     {
-        $begins = preg_match_all('#\{/\*\s*'.preg_quote(self::BEGIN, '#').'\b#', $page);
-        $ends = preg_match_all('#\{/\*\s*'.preg_quote(self::END, '#').'\s*\*/\}#', $page);
+        $starts = substr_count($contents, self::START);
+        $ends = substr_count($contents, self::END);
 
-        if ($begins === 0 && $ends === 0) {
+        if ($starts === 0 && $ends === 0) {
             return ['state' => 'absent'];
         }
 
-        if ($begins !== 1 || $ends !== 1) {
-            return ['state' => 'malformed', 'error' => "expected exactly one begin and one end marker, found {$begins} begin and {$ends} end"];
+        if ($starts !== 1 || $ends !== 1) {
+            return ['state' => 'malformed', 'error' => "expected exactly one start and one end marker, found {$starts} start and {$ends} end"];
         }
 
-        $pattern = '#\{/\*\s*'.preg_quote(self::BEGIN, '#').'\b.*?\*/\}(.*?)\{/\*\s*'.preg_quote(self::END, '#').'\s*\*/\}#s';
+        $block = self::extract($contents);
 
-        if (preg_match($pattern, $page, $block) !== 1) {
-            return ['state' => 'malformed', 'error' => 'the end marker comes before the begin marker'];
-        }
-
-        if (preg_match('#```json[ \t]*\R(.*?)\R```#s', $block[1], $fence) !== 1) {
-            return ['state' => 'malformed', 'error' => 'no fenced ```json block between the markers'];
-        }
-
-        $facts = json_decode($fence[1], true);
-
-        if (! is_array($facts) || array_is_list($facts) && $facts !== []) {
-            return ['state' => 'malformed', 'error' => 'the fenced block is not a JSON object'];
-        }
-
-        return ['state' => 'present', 'facts' => $facts];
+        return $block === null
+            ? ['state' => 'malformed', 'error' => 'the end marker comes before the start marker']
+            : ['state' => 'present', 'block' => $block];
     }
 
     /**
-     * The keys whose values differ between a page's facts and the fresh ones, empty when in step.
-     * Each line names the key and both values.
+     * How a page's block differs from the fresh one, one line per differing line. Empty when the two
+     * are byte-identical.
      *
-     * @param  array<string, mixed>  $page
-     * @param  array<string, mixed>  $fresh
      * @return list<string>
      */
-    public static function drift(array $page, array $fresh): array
+    public static function drift(string $page, string $fresh): array
     {
-        $lines = [];
-
-        foreach (array_unique([...self::KEYS, ...array_keys($page)]) as $key) {
-            $has = array_key_exists($key, $page);
-            $expected = array_key_exists($key, $fresh);
-
-            if ($has && ! $expected) {
-                $lines[] = "`{$key}` is not a declaration fact (page says ".json_encode($page[$key]).')';
-            } elseif (! $has && $expected) {
-                $lines[] = "`{$key}` is missing (declaration says ".json_encode($fresh[$key]).')';
-            } elseif ($has && $page[$key] !== $fresh[$key]) {
-                $lines[] = "`{$key}`: page says ".json_encode($page[$key]).', declaration says '.json_encode($fresh[$key]);
-            }
+        if ($page === $fresh) {
+            return [];
         }
 
-        return $lines;
+        $pageLines = explode("\n", $page);
+        $freshLines = explode("\n", $fresh);
+        $lines = [];
+
+        foreach (array_diff($freshLines, $pageLines) as $line) {
+            $lines[] = "the declaration renders `{$line}`, which the page lacks";
+        }
+
+        foreach (array_diff($pageLines, $freshLines) as $line) {
+            $lines[] = "the page has `{$line}`, which the declaration does not render";
+        }
+
+        return $lines === [] ? ['the block differs from a fresh rendering in whitespace or line order'] : $lines;
+    }
+
+    private static function duplicates(OnKeyDuplicate $policy): string
+    {
+        return match ($policy) {
+            OnKeyDuplicate::Supersede => 'Supersede — a later registration under a taken key replaces the earlier entry, in its place',
+            OnKeyDuplicate::Reject => 'Reject — registering a taken key throws',
+            OnKeyDuplicate::Admit => 'Admit — every registration is kept; a single-entry read of a shared key refuses as ambiguous',
+        };
+    }
+
+    private static function population(PopulationRequirement $requirement): string
+    {
+        return match ($requirement) {
+            PopulationRequirement::Required => 'Required — an empty registry is reported as unpopulated',
+            PopulationRequirement::Optional => 'Optional — an empty registry is normal',
+        };
+    }
+
+    private static function code(string $text): string
+    {
+        return '`'.str_replace('`', "'", $text).'`';
     }
 }

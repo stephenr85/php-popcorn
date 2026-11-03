@@ -99,7 +99,7 @@ final class RegistryDocsCheck
                 continue;
             }
 
-            $read = RegistryFacts::extract((string) file_get_contents($this->docs->absolute($page)));
+            $read = RegistryFacts::read((string) file_get_contents($this->docs->absolute($page)));
 
             if ($read['state'] === 'absent') {
                 continue;
@@ -113,7 +113,7 @@ final class RegistryDocsCheck
 
             $factsChecked++;
 
-            foreach (RegistryFacts::drift($read['facts'], RegistryFacts::of($declaration)) as $line) {
+            foreach (RegistryFacts::drift($read['block'], RegistryFacts::render($declaration, $census->classes[$root])) as $line) {
                 $drift[] = "{$page} ({$root}): facts drifted from the declaration: {$line}";
             }
         }
