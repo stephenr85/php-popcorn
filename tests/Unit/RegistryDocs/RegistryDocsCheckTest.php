@@ -180,17 +180,27 @@ it('structurally skips the empty root: never in the population, a manifest key o
 it('fails pages and manifest entries naming a root this package does not declare (exact root membership)', function () {
     $report = rdCheck(rdPackage([
         ...rdPages(...RD_FIXTURE_ROOTS),
-        ...rdPages('docs.fixture'), // a PREFIX of declared roots is still not a declared root
         ...rdPages('docs.fixture.nonconforming'),
+        ...rdPages('docs.elsewhere'), // a prefix of NO declared root is a dead root, not a cluster
         ...rdManifest(['external' => ['docs.fixture.alpha.entry' => 'https://example.com/x']]),
     ]));
 
     $failures = implode("\n", $report->failures());
 
     expect($report->uncovered())->toBe([])
-        ->and($failures)->toContain('docs/registries/docs.fixture.mdx names `docs.fixture`, which no `#[IsRegistry]` in this package declares')
+        ->and($failures)->toContain('docs/registries/docs.elsewhere.mdx names `docs.elsewhere`, which no `#[IsRegistry]` in this package declares')
         ->and($failures)->toContain('names `docs.fixture.nonconforming`, which no `#[IsRegistry]`')
         ->and($failures)->toContain('manifest names `docs.fixture.alpha.entry`, which no `#[IsRegistry]` in this package declares');
+});
+
+it('accepts a cluster page named for a prefix of roots this package declares (ruling 7)', function () {
+    $report = rdCheck(rdPackage([
+        ...rdPages(...RD_FIXTURE_ROOTS),
+        ...rdPages('docs.fixture'), // the cluster of every docs.fixture.* root
+    ]));
+
+    expect($report->failures())->toBe([])
+        ->and(array_key_exists('docs.fixture', $report->coverage))->toBeFalse('a cluster is not a root');
 });
 
 function rdAlphaBlock(): string

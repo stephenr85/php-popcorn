@@ -82,6 +82,14 @@ final class RegistryDocsCheck
         }
 
         foreach ($this->docs->pages() as $root => $path) {
+            // A CLUSTER page (registry-docs ticket 01, ruling 7; ticket 03): the filename is a
+            // segment-wise prefix shared by roots this package declares, such as `beam.particle` over
+            // `beam.particle.resources`. It documents the cluster, not a root, so it is no dead root.
+            // Which package owns a cluster spanning packages is the catalog tier's to decide.
+            if (! isset($declared[$root]) && self::isClusterOf($root, array_keys($declared))) {
+                continue;
+            }
+
             if (! isset($declared[$root])) {
                 $errors[] = "{$path} names `{$root}`, which no `#[IsRegistry]` in this package declares (dead root; the filename is the dotted root, verbatim)";
             }
@@ -119,5 +127,17 @@ final class RegistryDocsCheck
         }
 
         return new RegistryDocsReport($package, true, $coverage, $errors, $drift, $factsChecked, $census->nonConforming);
+    }
+
+    /** @param  list<string|int>  $roots */
+    private static function isClusterOf(string $prefix, array $roots): bool
+    {
+        foreach ($roots as $root) {
+            if (str_starts_with((string) $root, $prefix.'.')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
