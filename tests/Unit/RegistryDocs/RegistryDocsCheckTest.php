@@ -212,7 +212,7 @@ it('renders the facts block byte-for-byte to the marker contract ticket 03 defin
     // Pinned literally: ticket 03's `RegistryFactsBlock::render()` must produce these same bytes for
     // this declaration, or the scaffold writes pages this check calls drifted.
     expect(rdAlphaBlock())->toBe(implode("\n", [
-        '{/* registry-facts:start — generated from the #[IsRegistry] declaration by `splicewire:beam:docs:registries:scaffold`. Rerun the command; do not edit between these markers. */}',
+        '{/* registry-facts:start — generated from the #[IsRegistry] declaration; regenerate it, do not edit between these markers. */}',
         '',
         '- **Root:** `docs.fixture.alpha`',
         '- **Entries:** `string`',
@@ -282,6 +282,9 @@ it('fails a malformed facts block and leaves a page without one unchecked', func
     'end without start' => ["- **Root:** `docs.fixture.alpha`\n".RegistryFacts::END."\n", 'expected exactly one start and one end marker, found 0 start and 1 end'],
     'two blocks' => [str_repeat(RegistryFacts::START."\n".RegistryFacts::END."\n", 2), 'expected exactly one start and one end marker, found 2 start and 2 end'],
     'end before start' => [RegistryFacts::END."\n".RegistryFacts::START."\n", 'the end marker comes before the start marker'],
+    // An earlier wording of the start marker is not recognised: a block still carrying one fails
+    // loudly until it is regenerated, rather than passing on a marker the renderer no longer writes.
+    'superseded start marker' => ["{/* registry-facts:start — an earlier wording of the marker. */}\n\n- **Root:** `docs.fixture.alpha`\n\n".RegistryFacts::END."\n", 'expected exactly one start and one end marker, found 0 start and 1 end'],
 ]);
 
 it('counts a page without a facts block as unchecked, not as drift', function () {

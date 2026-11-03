@@ -30,12 +30,16 @@ use Rushing\Popcorn\Registries\PopulationRequirement;
  * - A page without {@see START} has no generated facts, and the check counts it as unchecked rather
  *   than drifted. {@see START} with no {@see END} after it, a second {@see START}, or an {@see END}
  *   with no {@see START} is malformed and fails the check.
+ * - {@see START} names no command or product: whatever tool writes the block, the marker only says
+ *   the block is generated. Only the exact current {@see START} is recognised. A block that still
+ *   opens with an earlier wording reads as an end marker with no start, so it fails until it is
+ *   regenerated; no superseded wording is accepted.
  *
  * This class renders and reads strings. It never writes a file.
  */
 final class RegistryFacts
 {
-    public const START = '{/* registry-facts:start — generated from the #[IsRegistry] declaration by `splicewire:beam:docs:registries:scaffold`. Rerun the command; do not edit between these markers. */}';
+    public const START = '{/* registry-facts:start — generated from the #[IsRegistry] declaration; regenerate it, do not edit between these markers. */}';
 
     public const END = '{/* registry-facts:end */}';
 
