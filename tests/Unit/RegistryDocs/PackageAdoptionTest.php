@@ -10,5 +10,10 @@ use Rushing\Popcorn\Registries\Docs\RegistryDocsCheck;
 it('documents every registry root this package declares, once it opts in with docs/registries/', function () {
     $report = RegistryDocsCheck::forPackage(dirname(__DIR__, 3))->run();
 
-    expect($report->failures())->toBe([], $report->summary());
+    // Active since docs/registries/ landed: one root (`popcorn.invocables`), its facts compared. The
+    // counts keep the test from passing over an inactive check if the directory ever disappears.
+    expect($report->failures())->toBe([], $report->summary())
+        ->and($report->active)->toBeTrue()
+        ->and($report->coverage)->toHaveCount(1)
+        ->and($report->factsChecked)->toBe(1);
 });

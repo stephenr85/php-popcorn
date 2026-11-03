@@ -1,0 +1,97 @@
+---
+title: Invocable capabilities
+segment: popcorn.invocables
+nav_order: 100
+excerpt: Named capabilities, array in and array out, answered locally, remotely or in a sandbox, and swappable by name.
+---
+
+# Invocable capabilities
+
+`popcorn.invocables` is the registry of **invocables**: named capabilities that take an array and
+return an array. A caller asks for `music.render` or `grounding.source.web` by name and never learns
+where the work happens. The `Invocable` contract is three methods, `name()`, `binding()` and
+`invoke(array $input): array`, and its `Binding` says how the capability is reached: a local PHP
+handler, an MCP tool or a webhook.
+
+{/* registry-facts:start — generated from the #[IsRegistry] declaration by `splicewire:beam:docs:registries:scaffold`. Rerun the command; do not edit between these markers. */}
+
+- **Root:** `popcorn.invocables`
+- **Entries:** `Rushing\Popcorn\Contracts\Invocable`
+- **Duplicate keys:** Supersede — a later registration under a taken key replaces the earlier entry, in its place
+- **Population:** Optional — an empty registry is normal
+- **Order:** `100` (display order, ascending)
+- **Declared by:** `Rushing\Popcorn\InvocableRegistry`
+
+{/* registry-facts:end */}
+
+## Registering a capability
+
+The package registers nothing; it ships the registry and three invocable types:
+
+- **`LocalInvocable`** wraps a PHP callable. It's the in-process default.
+- **`RemoteInvocable`** is answered out of process, over an MCP or webhook binding. You inject the
+  transport, a `fn (string $name, array $input): array`, so the kernel depends on no HTTP or MCP
+  client.
+- **`RunnerInvocable`** carries a sandboxed run (a `Runner` with its manifest and grant) as an
+  ordinary invocable, so a sandboxed capability can be registered, cached and overridden like any
+  other.
+
+An invocable keys itself by its `name()`:
+
+```php
+use Rushing\Popcorn\InvocableRegistry;
+use Rushing\Popcorn\Invocables\LocalInvocable;
+
+$registry = new InvocableRegistry;
+
+$registry->register(new LocalInvocable('text.shout', fn (array $input) => [
+    'text' => strtoupper($input['text'] ?? ''),
+]));
+
+$registry->invoke('text.shout', ['text' => 'hello']); // ['text' => 'HELLO']
+```
+
+You can also pass an explicit key with the invocable as the entry, `register('text.shout', $invocable)`.
+An entry that isn't an `Invocable` is refused at registration.
+
+## Reading it
+
+- `invoke($name, $input)` resolves and runs in one call; `get($name)` returns the invocable.
+- `names()` lists the names as you registered them.
+- Names often come from data a customer wrote, such as a schema naming the capability that fills a
+  field. So `get()` and `invoke()` treat a name that isn't even a legal key as **not registered**
+  and throw `RegistryMiss` for both. The registry's key-taking methods (`has()`, `resolve()`) still
+  reject a malformed key as a programming error.
+- Names are dotted, so you can list a branch: `children('music')` and `descendants('music')` return
+  the keys registered beneath `music`.
+
+## Overriding and removing
+
+The policy is **supersede**, and that's the point of the registry. Registering an invocable under a
+name that's taken replaces it, so a package's local default can be swapped for an application's own
+implementation, or for a tenant's webhook, with no caller changing.
+
+`forget($name)` removes one capability and `forgetBy($registrant)` removes everything one registrant
+added. Together they're the teardown half of a per-tenant overlay: register a tenant's capabilities
+when you switch to it, forget them when you switch back, and nothing bleeds between tenants on a
+long-lived worker.
+
+## Your own branch
+
+A package that wants its capabilities under its own root extends `InvocableRegistry` and declares a
+different root on the subclass. It inherits every method above. `rushing/laravel-data-nav` does
+exactly this for its `data-nav` capabilities.
+
+## In Laravel
+
+[`rushing/laravel-popcorn`](https://github.com/stephenr85/laravel-popcorn) adds what a Laravel
+application wants on top of this registry: `ProcessInvocable` for subprocess capabilities,
+`CachedInvocable` to memoize any capability's result, container wiring and the deploy-time registry
+bake. This package stays framework-free.
+
+## Going deeper
+
+The source is
+[`InvocableRegistry`](https://github.com/stephenr85/php-popcorn/blob/main/src/InvocableRegistry.php);
+the contract is
+[`Invocable`](https://github.com/stephenr85/php-popcorn/blob/main/src/Contracts/Invocable.php).
