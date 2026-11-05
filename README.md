@@ -34,5 +34,14 @@ one owns. It has no page of its own. The check that a package documents its regi
 [`rushing/laravel-popcorn` README](https://github.com/stephenr85/laravel-popcorn#documenting-your-registries)
 explains how to adopt it.
 
+`Registries\Docs\DataExamples` keeps the **data examples** on a registry page honest. An example is a
+PHP file, `docs/registries/examples/<page>/<name>.php`, that returns a value: a registry's resolved
+entries, or something derived from them. Its captured output is committed beside it as
+`<name>.json`, and the page shows both between a `data-example:start <name>` / `end` marker pair.
+A package regenerates them with a `docs:examples` script that boots its test case once per example
+(`DataExamples::main()`, writing only with `--write`), and verifies them with one test: `problems()`
+for the fixtures and page blocks, and `drift()` per example for the capture. The class docblock is
+the reference.
+
 Start with [`AGENTS.md`](AGENTS.md); the contract docblocks are the reference.
 Tests: `composer test`.
