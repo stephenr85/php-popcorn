@@ -69,8 +69,9 @@ An entry that isn't an `Invocable` is refused at registration.
 
 ## Overriding and removing
 
-The policy is **supersede**, and that's the point of the registry. Registering an invocable under a
-name that's taken replaces it, so a package's local default can be swapped for an application's own
+The [**duplicate-key policy**](/beam/docs/foundations/registries#key-policies) is
+**supersede**, and that's the point of the registry. Registering an invocable under a name that's
+taken replaces it, so a package's local default can be swapped for an application's own
 implementation, or for a tenant's webhook, with no caller changing.
 
 `forget($name)` removes one capability and `forgetBy($registrant)` removes everything one registrant
