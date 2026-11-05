@@ -39,7 +39,8 @@ use InvalidArgumentException;
  * });
  * ```
  *
- * Laravel code says the same through `Popcorn::registeredBy()` in `rushing/laravel-popcorn`.
+ * A provider says it once for its whole lifecycle with {@see ScopesRegistrant}; Laravel code can also
+ * open a scope through `Popcorn::registeredBy()` in `rushing/laravel-popcorn`.
  *
  * - **Null only.** {@see BasicRegistry::register()} applies the scope as `$by ??= Registrant::current()`,
  *   so an explicit registrant always wins, the tenant selector above included.

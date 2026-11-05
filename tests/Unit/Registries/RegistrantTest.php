@@ -7,6 +7,7 @@ use Rushing\Popcorn\Registries\IsRegistry;
 use Rushing\Popcorn\Registries\OnKeyDuplicate;
 use Rushing\Popcorn\Registries\Registrant;
 use Rushing\Popcorn\Registries\RegistryIndex;
+use Rushing\Popcorn\Registries\ScopesRegistrant;
 
 /**
  * The registrant vocabulary and its scoped default (docs-feedback ticket 06). The scope fills a null
@@ -163,4 +164,53 @@ it('selects inherited entries by the package, the same as explicitly named ones'
     $store->forgetBy('acme/package');
 
     expect(array_map('strval', $store->keys()))->toBe(['demo.things.other']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// ScopesRegistrant: the provider-side door, in the hook shape spatie's PackageServiceProvider has
+// ---------------------------------------------------------------------------------------------
+
+abstract class HookedLifecycle
+{
+    /** @var array<string, string|null> */
+    public array $seen = [];
+
+    public function __construct(public BasicRegistry $store) {}
+
+    /** @return void */
+    public function register()
+    {
+        $this->seen['register'] = Registrant::current();
+        $this->store->register('registered', 'r');
+    }
+
+    /** @return void */
+    public function boot()
+    {
+        $this->seen['boot'] = Registrant::current();
+        $this->store->register('booted', 'b');
+        $this->store->register('explicit', 'e', by: 'config:acme.things');
+    }
+}
+
+it('scopes a hook-shaped provider register() and boot() to its package, and nothing after', function () {
+    $provider = new class(registrantStore()) extends HookedLifecycle
+    {
+        use ScopesRegistrant;
+
+        protected function registrant(): string
+        {
+            return 'acme/scoped-package';
+        }
+    };
+
+    $provider->register();
+    $provider->boot();
+    $provider->store->register('after', 'a');
+
+    expect($provider->seen)->toBe(['register' => 'acme/scoped-package', 'boot' => 'acme/scoped-package'])
+        ->and($provider->store->registrantOf('demo.things.registered'))->toBe('acme/scoped-package')
+        ->and($provider->store->registrantOf('demo.things.booted'))->toBe('acme/scoped-package')
+        ->and($provider->store->registrantOf('demo.things.explicit'))->toBe('config:acme.things')
+        ->and($provider->store->registrantOf('demo.things.after'))->toBeNull();
 });
