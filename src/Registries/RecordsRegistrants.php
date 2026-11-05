@@ -55,9 +55,10 @@ namespace Rushing\Popcorn\Registries;
  * **It does not fix what `$by` SAYS.** Ticket 29 D2 measured the live content and it is near-degenerate:
  * 38 entries, **13 carry `$by`**, and of 10 distinct registrants **8 are the registering registry's own
  * class**, plus `extend` ×3 from graphine's `Manager` delegation. Nothing today names a *package* or a
- * *provider*. Setting that vocabulary is tickets 37 and 38's as they migrate, and until they do, a
- * discriminator built over this field would be reading a tautology. `null` is legal and stays legal —
- * the majority case, today.
+ * *provider*. The vocabulary now lives on {@see Registrant} (`vendor/name`, `config:<key>`,
+ * `class:<FQCN>`), with a scoped default that names the package for writes that name nobody; until
+ * providers adopt it, a discriminator built over this field would be reading a tautology. `null` is
+ * legal and stays legal.
  */
 interface RecordsRegistrants
 {

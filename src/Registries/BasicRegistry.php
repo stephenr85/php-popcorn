@@ -268,6 +268,10 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
     {
         $key = $this->door($key);
 
+        // A write that names nobody inherits the open registrant scope, if any. Never overrides an
+        // explicit $by: that is what keeps per-tenant teardown selectors exact ({@see Registrant}).
+        $by ??= Registrant::current();
+
         $slot = null;
         $position = $this->sequence;
 

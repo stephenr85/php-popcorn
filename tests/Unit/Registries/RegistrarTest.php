@@ -58,7 +58,7 @@ it('names the config key as the registrant on every write', function () {
         ->superseded('table');
 
     expect($superseded)->toHaveCount(1)
-        ->and($superseded[0]->by)->toBe('beam.core.renderings');
+        ->and($superseded[0]->by)->toBe('config:beam.core.renderings');
 });
 
 /**
@@ -105,7 +105,7 @@ it('sets the scanned class own FQCN as the registrant, not the path it was found
         ->superseded('invoices');
 
     expect($superseded[0]->by)
-        ->toBe(AnnotatedResource::class);
+        ->toBe('class:'.AnnotatedResource::class);
 });
 
 it('refuses to invent a key from a class name when nothing says what the key is', function () {

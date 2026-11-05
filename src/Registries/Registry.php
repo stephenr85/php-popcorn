@@ -160,7 +160,9 @@ interface Registry
      * carries it, and it is not decoration: it is what makes last-wins auditable, what makes a miss
      * message actionable, and the property whose absence is the standing indictment of the Windows
      * Registry, where no key records what put it there (ticket 06 D11). `null` is legal and degrades
-     * exactly those two things.
+     * exactly those two things; a `null` written inside a {@see Registrant::scoped()} block records the
+     * scope's registrant instead. {@see Registrant} states the vocabulary: `vendor/name`,
+     * `config:<key>`, `class:<FQCN>`. An explicit `$by` is authoritative and is never rewritten.
      *
      * `$ability` declares that reading this entry is GATED on that authorization token. A named
      * argument rather than an attribute, because a registry entry is often a value, an array or a

@@ -2,6 +2,7 @@
 
 namespace Rushing\Popcorn\Registries\Registrars;
 
+use Rushing\Popcorn\Registries\Registrant;
 use Rushing\Popcorn\Registries\Registrar;
 use Rushing\Popcorn\Registries\Registry;
 
@@ -37,8 +38,9 @@ class ConfigRegistrar implements Registrar
 {
     /**
      * @param  array<string, mixed>  $entries  key => entry, already read out of the host's config
-     * @param  string  $configKey  where the host read it from, e.g. `beam.core.renderings` — this is
-     *                             both the {@see source()} rendering and the `$by` on every write
+     * @param  string  $configKey  where the host read it from, e.g. `beam.core.renderings` — named in
+     *                             the display-only {@see source()}, and `config:<key>` is the `$by` on
+     *                             every write ({@see Registrant::fromConfig()})
      */
     public function __construct(
         private array $entries,
@@ -53,7 +55,7 @@ class ConfigRegistrar implements Registrar
     public function fill(Registry $registry): void
     {
         foreach ($this->entries as $key => $entry) {
-            $registry->register($key, $entry, by: $this->configKey);
+            $registry->register($key, $entry, by: Registrant::fromConfig($this->configKey));
         }
     }
 

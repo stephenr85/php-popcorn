@@ -5,6 +5,7 @@ namespace Rushing\Popcorn\Registries\Registrars;
 use InvalidArgumentException;
 use Rushing\Popcorn\Discovery\AttributedClassScanner;
 use Rushing\Popcorn\Registries\HasRegistryKey;
+use Rushing\Popcorn\Registries\Registrant;
 use Rushing\Popcorn\Registries\Registrar;
 use Rushing\Popcorn\Registries\Registry;
 
@@ -88,10 +89,10 @@ class AttributeRegistrar implements Registrar
         foreach ($this->scanner->scan($this->paths, $this->attribute, $this->instanceof) as $class) {
             $entry = $this->project === null ? $class : ($this->project)($class);
 
-            // The scanned class's own FQCN, per ticket 07 D13 — the registrant is the thing that
+            // `class:<FQCN>` of the scanned class, per ticket 07 D13 — the registrant is the thing that
             // brought the entry into being, which for a scan is the annotated class and not the path
             // it happened to be found under.
-            $registry->register($this->keyFor($class, $entry), $entry, by: $class);
+            $registry->register($this->keyFor($class, $entry), $entry, by: Registrant::fromClass($class));
         }
     }
 

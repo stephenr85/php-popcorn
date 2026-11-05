@@ -71,8 +71,8 @@ interface Registrar
     /**
      * Read this registrar's source and write what it finds into `$registry`.
      *
-     * **Every write must carry a meaningful `$by`** — the config key, the scanned class's own FQCN, the
-     * composer fragment's package name. `null` is legal on {@see Registry::register()} and degrades two
+     * **Every write must carry a meaningful `$by`** — `config:<key>` for a config read, `class:<FQCN>`
+     * for a scanned class, the composer fragment's package name ({@see Registrant} has the builders). `null` is legal on {@see Registry::register()} and degrades two
      * things a registrar has no excuse to degrade: the miss diagnostics and the supersession record
      * (ticket 07 D13, 06 D11). A registrar is the one writer that always knows where its entry came
      * from, because reading from somewhere is its entire job.
