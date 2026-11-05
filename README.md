@@ -28,6 +28,11 @@ This package declares one registry:
 - [`popcorn.invocables`](docs/registries/popcorn.invocables.mdx): named, transport-agnostic
   capabilities, array in and array out. `InvocableRegistry` declares it.
 
+A registry of your own holds a `Registries\BasicRegistry` as a field, implements `Gated` and
+`Registry`, and uses the `Registries\ForwardsToRegistryStore` trait. The trait forwards the reads and
+the authorizer to that field, so the class writes only `register()`, a `store()` method returning the
+field, and its own vocabulary. `rushing/laravel-popcorn`'s `popcorn:make:registry` generates one.
+
 `RegistryIndex` also declares the empty root: the index of every registry, keyed by the root each
 one owns. It has no page of its own. The check that a package documents its registries,
 `Registries\Docs\RegistryDocsCheck`, lives here too. The

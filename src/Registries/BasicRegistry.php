@@ -33,7 +33,8 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * ```
  *
  * A registry may equally implement {@see Registry} itself and delegate method-for-method; this class is
- * what stops that being 200 lines of arrays in 50 packages.
+ * what stops that being 200 lines of arrays in 50 packages, and {@see ForwardsToRegistryStore} writes
+ * the delegation once.
  *
  * ## One flat list, in registration order
  *
