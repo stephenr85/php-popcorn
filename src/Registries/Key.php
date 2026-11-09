@@ -26,11 +26,11 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  *
  * ## `-`, `_` and `:` are all legal INSIDE a segment; `.` alone separates
  *
- * Ticket 05 set the charset at `[a-z0-9-]` and pinned `beam_realm` and `beam:realm` as illegal. Ticket
- * 30 widened it, on the dev's call, after the narrow charset started rejecting live estate keys rather
- * than catching mistakes: `grounding.source.context_scope` — whose leaf is a key lifted from a customer
- * grounding schema — and `ParticleOperationRegistry`'s `resource:name`, which ticket 21 D9 had recorded
- * as the standing counter-example to "a rekey is a one-line attribute change".
+ * The charset was once the narrower `[a-z0-9-]`, with `beam_realm` and `beam:realm` illegal. It was
+ * widened because the narrow charset rejected real keys rather than catching mistakes:
+ * `grounding.source.context_scope` — whose leaf is a key lifted from a customer grounding schema —
+ * and `ParticleOperationRegistry`'s `resource:name`, the standing counter-example to "a rekey is a
+ * one-line attribute change" (tickets 05, 21 D9 and 30).
  *
  * The widening admits CHARACTERS; it does not add a fold, so every property above survives intact. The
  * separator is still `.` and only `.`, so `:` is not an alternate dot — `beam:realm` is now ONE segment
@@ -56,6 +56,8 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  * shipped `RealmResourceRegistry::chain()` shape); it is never inferred from how someone spelled a
  * key. {@see isUnder()} and {@see parent()} serve enumeration and longest-prefix routing, which walk
  * SEGMENTS, never characters — `beam.realms` is not under `beam.realm`.
+ *
+ * @api
  */
 class Key implements Rootable
 {

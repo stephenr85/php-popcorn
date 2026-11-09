@@ -107,6 +107,8 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * prose: `for()` does `new static($declaration)`, so anything that DID subclass must keep the
  * constructor signature. Without it a level-8 run cannot prove the factory safe, and the estate has
  * no `final` to reach for.
+ *
+ * @api
  */
 class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, Nested, RecordsRegistrants, RecordsSupersession, Registry
 {
@@ -161,9 +163,9 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
 
     /**
      * {@see CarriesDeclaration} — a `BasicRegistry` is constructed WITH its declaration, so it has
-     * always been able to answer this. Saying so on an interface rather than leaving the index to
-     * `instanceof` this class is registry-kernel ticket 59 B1: archetype **f** holds no `BasicRegistry`
-     * and still has to declare inline.
+     * always been able to answer this. It is said on an interface rather than left to the index's
+     * `instanceof` this class because a registry that holds no `BasicRegistry` still has to declare
+     * inline (registry-kernel ticket 59 B1).
      */
     public function declaration(): IsRegistry
     {
@@ -216,9 +218,9 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
     /**
      * Install the host's authorizer.
      *
-     * Present so the index can push one authorizer down into the registries it composes — per ticket 09
-     * D7 there is exactly ONE, held by the index, because per-registry wiring means a registry that
-     * forgets to wire it is silently open. The attachment point itself is ticket 20's.
+     * Present so the index can push one authorizer down into the registries it composes. There is
+     * exactly ONE, held by the index, because per-registry wiring means a registry that forgets to
+     * wire it is silently open (ticket 09 D7; the attachment point is ticket 20's).
      */
     public function authorizeWith(?Authorizer $authorizer): static
     {
@@ -231,9 +233,9 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
      * Attach a registrar and let it fill this store immediately.
      *
      * The eagerness is {@see Filled}'s decision, and holding it here rather than in each owner is what
-     * makes it uniform: an owner that composes a `BasicRegistry` gets ticket 07 D9's ordering — attach
+     * makes it uniform: an owner that composes a `BasicRegistry` gets the standard ordering — attach
      * at boot, hand-register later, later wins by {@see OnKeyDuplicate::Supersede} — without writing a line
-     * of it.
+     * of it (ticket 07 D9).
      */
     public function attach(Registrar $registrar): void
     {
@@ -251,8 +253,8 @@ class BasicRegistry implements CarriesDeclaration, Filled, Forgettable, Gated, N
     /**
      * Write an entry, applying the declared duplicate policy.
      *
-     * A supersession lands **in the displaced entry's slot** rather than at the end — registry-kernel
-     * ticket 62, and see {@see OnKeyDuplicate::Supersede} for why. That is what `$slot` is doing here: the
+     * A supersession lands **in the displaced entry's slot** rather than at the end; see
+     * {@see OnKeyDuplicate::Supersede} for why (registry-kernel ticket 62). That is what `$slot` is doing here: the
      * new record inherits the displaced record's `position` and is spliced back into the same index,
      * so the store's array order stays identical to its position order and every read that walks
      * `$this->entries` in natural order (`keys()`, `relativeKeys()`, `descendants()`, `unfiltered()`)

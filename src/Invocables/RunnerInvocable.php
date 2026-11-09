@@ -25,6 +25,8 @@ use Rushing\Popcorn\Runner\Result;
  * invocable during hydration (per-invocation resolution ⇒ rebuild the invocable). `invoke()` is
  * literally `run(…)->throw()->output()`, preserving `ProcessInvocable`'s array-out-or-throw contract;
  * Runner-aware callers (Conduit, meter, audit) read the total {@see Result} via {@see run()} instead.
+ *
+ * @api
  */
 class RunnerInvocable implements Invocable
 {

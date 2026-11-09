@@ -6,13 +6,12 @@ namespace Rushing\Popcorn\Registries;
  * The seam through which a host answers "may the caller see this entry?" — the one thing no static
  * declaration can express, because the answer depends on who is asking.
  *
- * (This sentence used to read "the ONE thing a tag cannot express", which quietly implied the kernel
- * had tags. It never did, and per ticket 31 it never will — see {@see IsRegistry}'s "What is
- * deliberately not a field".)
+ * The kernel has no tags and will not gain them (ticket 31), so this seam is not "what a tag cannot
+ * express"; see {@see IsRegistry}'s "What is deliberately not a field".
  *
  * Popcorn does not gate. It has no actor, no permission model and no `illuminate/*` dependency to
  * borrow one from; it exposes this and a host supplies the policy. `splicewire/laravel-beam`
- * registers an implementation that consults its particle abilities — see registry-kernel ticket 09.
+ * registers an implementation that consults its particle abilities (registry-kernel ticket 09).
  *
  * ## What this deliberately does NOT receive
  *
@@ -55,6 +54,8 @@ namespace Rushing\Popcorn\Registries;
  * It is per-actor by construction. A registrar's output may be cached — it is actor-free and
  * serialisable — but the cache must sit UNDER this seam, never over it. A cached discovery result
  * that has already been authorized is poisoned for the next caller.
+ *
+ * @api
  */
 interface Authorizer
 {

@@ -22,6 +22,8 @@ use Rushing\Popcorn\Runner\Exceptions\InvalidManifest;
  *
  * Language lives *here*, not in the Runner type — one `BwrapRunner` runs Node or Python via argv
  * (ticket 01: a substrate is one Runner per isolation-backend, never per language).
+ *
+ * @api
  */
 class Manifest
 {

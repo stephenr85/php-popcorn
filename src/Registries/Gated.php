@@ -29,6 +29,8 @@ namespace Rushing\Popcorn\Registries;
  * it already holds, and every later `describe()` stamps the incoming one. Only one edge would make
  * filtering depend on whether an owner package booted before or after the host installed its policy —
  * an ordering nobody controls, and silently open on the losing side.
+ *
+ * @api
  */
 interface Gated
 {

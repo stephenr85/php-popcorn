@@ -29,16 +29,16 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
  * entries genuinely stamped, which would prefix every registry's address with a meaningless segment and
  * make `beam.particle.resources` unaddressable under its own name.
  *
- * ## Entries are LIVE registries — and since ticket 73 there is a second, BAKED door
+ * ## Entries are LIVE registries — and there is a second, BAKED door
  *
  * `describe()` takes an object that already exists. The owner built it in its own `boot()` — the
  * register-down rule again — so `keys()` walks a list of things already in memory and instantiates
  * nothing.
  *
- * ⚠️ **This docblock used to continue: *"Holding class-strings and resolving them lazily would invert
- * the direction: the index would become the thing that decides when a consumer's registry comes into
- * being."* Registry-kernel ticket 73 D2 overruled that, and the reason is worth reading before
- * re-arguing it.** {@see describeLazily()} holds exactly that class-string, and the direction is
+ * ⚠️ **Holding class-strings and resolving them lazily does not invert the direction — the index
+ * does not become the thing that decides when a consumer's registry comes into being (registry-kernel
+ * ticket 73 D2). The reason is worth reading before re-arguing it.** {@see describeLazily()} holds
+ * exactly that class-string, and the direction is
  * unharmed: the owner still declares, the bake still reads the owner's own `#[IsRegistry]`, and the
  * index still never scans or discovers at run time. What changed is only WHEN the object is built.
  *
@@ -73,6 +73,7 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
  * has no business claiming to.
  *
  * @implements Registry<Registry<mixed>>
+ * @api
  */
 #[IsRegistry(
     root: '',
@@ -175,11 +176,11 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * They differ under the sanctioned composition pattern, where the owner HOLDS a {@see BasicRegistry}
      * rather than implementing {@see Registry} itself (ticket 01 D1).
      *
-     * ⚠️ **This is no longer how a registry normally enters the index.** Ticket 73's cutover deleted the
-     * 60 hand-written `describe()` calls across the estate; membership is baked from the class's own
-     * `#[IsRegistry]` and taken through {@see describeLazily()}. This method remains the door — the bake
-     * calls it, and a consumer building its own index by hand still may — but a provider that adds a
-     * `describe()` call today is re-introducing the act the ticket removed.
+     * ⚠️ **This is not how a registry normally enters the index.** Membership is baked from the class's
+     * own `#[IsRegistry]` and taken through {@see describeLazily()}, so providers write no hand-written
+     * `describe()` calls (registry-kernel ticket 73). This method remains the door — the bake calls it,
+     * and a consumer building its own index by hand still may — but a provider that adds a
+     * `describe()` call is re-introducing the hand registration the bake replaced.
      *
      * Requiring the owner to implement `Registry` instead — so one argument would do — was rejected
      * precisely because it would make method-for-method delegation mandatory and quietly withdraw that
@@ -245,7 +246,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     /**
      * Take a registry into the index LAZILY: its declared root now, its instance on first read.
      *
-     * The baked half of registry-kernel ticket 73. `$root` comes off the class's `#[IsRegistry]` at BAKE
+     * The baked door (registry-kernel ticket 73). `$root` comes off the class's `#[IsRegistry]` at BAKE
      * time and `$class` is what provides the registry; nothing is autoloaded or constructed here, so a
      * host with 85 declared registries pays 85 array writes at boot instead of 85 constructions.
      *
@@ -744,7 +745,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * It exists because the failure mode without it is silent in one direction and loud in the other. A
      * runtime-rooted registry described per tenant would either leak across tenants or throw
      * {@see Exceptions\DuplicateRegistryKey} on the next hydration, and a caller that has decided to take
-     * that route needs a way back out. Whether that route is ever sanctioned is ticket 26's.
+     * that route needs a way back out. Its existence does not sanction that route (ticket 26).
      *
      * The owner record goes with it, because {@see owner()} falling back to a store that is no longer
      * described would answer for a registry the index has forgotten.
@@ -873,8 +874,8 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * {@see RecordsRegistrants} — which package or provider described the registry at this root.
      *
      * The index's own `by` is written by {@see describe()} on every call: the explicit `by:` argument
-     * where one is passed, otherwise the owner's class, otherwise the store's. So unlike the entry-level
-     * population ticket 29 D2 measured, this one is **never null** — the index is the one place the
+     * where one is passed, otherwise the owner's class, otherwise the store's. So unlike entry-level
+     * registrants (ticket 29 D2), this one is **never null** — the index is the one place the
      * registrant vocabulary is already total (registry-kernel ticket 48).
      */
     public function registrantOf(RegistryKey|string $key): ?string
@@ -897,7 +898,7 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
     /**
      * {@see RecordsSupersession} — what was displaced at this root.
      *
-     * Empty until something is displaced, and under registry-kernel ticket 48 the index CAN now displace:
+     * Empty until something is displaced, and the index CAN displace (registry-kernel ticket 48):
      * see the description on the class attribute for why a duplicate root became a recorded
      * supersession rather than a boot-time throw.
      */
@@ -971,9 +972,9 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * The index's entries are registries, so its inherited {@see Nested} verbs — `children()`,
      * `descendants()`, `nodeAt()` — answer about ROOTS. They are the right answer to "what registries
      * live under here" and the wrong one to "what does the keyspace look like here", and the two
-     * diverge the moment roots interleave (ticket 26 D0: `beam.particle` and
-     * `beam.particle.fragments.ops` may both be described, and `routeTo()` already routes between them
-     * by longest prefix). The `*Across` pair is the keyspace altitude. Bare verb = this index's own
+     * diverge the moment roots interleave: `beam.particle` and `beam.particle.fragments.ops` may both
+     * be described, and `routeTo()` routes between them by longest prefix (ticket 26 D0). The
+     * `*Across` pair is the keyspace altitude. Bare verb = this index's own
      * entries; `Across` = every entry in every registry it holds.
      *
      * ## What it reports, and the one case that reads Absent
@@ -1005,11 +1006,11 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      * The children of `$key` WHEREVER THEY LIVE — entry-children unioned with child roots, across the
      * registry boundary (ticket 46, charter expanded by ticket 26 D8).
      *
-     * Nothing unioned them before this. `$index->children()` returns child roots and
+     * Nothing else unions them. `$index->children()` returns child roots and
      * `$registry->children()` returns child entry keys, so with `beam.particle` and
-     * `beam.particle.fragments.ops` both described, no verb answered *"the children of
-     * `beam.particle.fragments`"* with the ops branch that genuinely lives below it — the interleaved
-     * tree ticket 26 had just sanctioned could not be enumerated or displayed.
+     * `beam.particle.fragments.ops` both described, neither answers *"the children of
+     * `beam.particle.fragments`"* with the ops branch that genuinely lives below it — without this
+     * verb an interleaved tree could not be enumerated or displayed (ticket 26).
      *
      * ## It returns bare keys, not (key, owning registry) pairs
      *
@@ -1025,19 +1026,19 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      *
      * A flat registry has no cross-boundary question to answer, and widening `Nested` with this would
      * oblige every implementation to have an opinion about an index it may not have. The deep walk is
-     * refused on ticket 17 D2's measurement: the full walk of 7,980 entries costs 9.4 ms but **423.8
+     * refused on measurement (ticket 17 D2): the full walk of 7,980 entries costs 9.4 ms but **423.8
      * KB of JSON for the bare keys alone**, so the decided model is registry-level eager, entry-level
      * lazy — and a cross-registry `descendants()` is the one verb that makes materializing all of it
      * an accident. A caller that genuinely wants the whole tree recurses this and pays visibly.
      *
      * ## It dedupes, though the invariant says it need not
      *
-     * Ticket 26 D6 landed a describe-time shadow check — two described registries should not both
-     * answer for one absolute key — which is what lets this be a plain merge rather than a precedence
-     * rule. The dedupe is defensive anyway, and more so since ticket 73 §1 made that check RECORD
-     * rather than throw ({@see shadowed()}): an overlap is now reported and permitted, on top of the
-     * **residual window** it always left (a registry described before its registrars fill it, carried
-     * by ticket 49). A duplicated node in a tree walk is a silent double-render rather than a caught
+     * A describe-time shadow check — two described registries should not both answer for one
+     * absolute key — is what lets this be a plain merge rather than a precedence rule (ticket 26 D6).
+     * The dedupe is defensive anyway, and more so because that check RECORDS rather than throws
+     * (ticket 73 §1), via {@see shadowed()}: an overlap is reported and permitted, on top of the
+     * **residual window** it always leaves — a registry described before its registrars fill it
+     * (ticket 49). A duplicated node in a tree walk is a silent double-render rather than a caught
      * error, so the merge does not rely on the check at all. Where both halves
      * offer the same address, the owning registry's own key object wins, so a foreign key type keeps
      * its rendering.
@@ -1089,21 +1090,21 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      *
      * ## It escaped one level and reported success
      *
-     * Until ticket 45 this unfiltered *which registries you can see* and handed back the live, still-gated
-     * singletons, so their ENTRIES stayed filtered. Measured three times, in three unrelated probes, and
-     * each one read as agreement rather than as a defect:
+     * This once unfiltered only *which registries you can see* and handed back the live, still-gated
+     * singletons, so their ENTRIES stayed filtered (ticket 45). It was measured three times, in three
+     * unrelated probes, and each one read as agreement rather than as a defect:
      *
      * ```
      * index->unfiltered()->tryResolve($root)->keys()                 →  5 of 10
      * index->unfiltered()->tryResolve($root)->unfiltered()->keys()   → 10 of 10
      * ```
      *
-     * Ticket 17's enumeration probe reported 4,030 of 7,980 for both the filtered and the "unfiltered"
-     * walk; ticket 29's `GraphSource` had to call `->unfiltered()` on every registry by hand to reach
-     * its 63-node count. **Zero measured callers wanted the one-level reading and three worked around
-     * it**, which is what makes this a defect rather than a taste — the same class as ticket 04 D1's
-     * `class_exists` guard, ticket 14's `require-dev` gate, 35 D3's symlink blindness and 41 D11's
-     * attribute non-inheritance: *visibility silently becoming a function of where you stand.*
+     * An enumeration probe reported 4,030 of 7,980 for both the filtered and the "unfiltered" walk
+     * (ticket 17); a `GraphSource` had to call `->unfiltered()` on every registry by hand to reach its
+     * 63-node count (ticket 29). **Zero measured callers wanted the one-level reading and three worked
+     * around it**, which is what makes this a defect rather than a taste — the same class as a
+     * `class_exists` guard, a `require-dev` gate, symlink blindness and attribute non-inheritance
+     * (tickets 04 D1, 14, 35 D3 and 41 D11): *visibility silently becoming a function of where you stand.*
      *
      * ## Why the index and only the index
      *
@@ -1123,9 +1124,9 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
      *
      * ## Still artisan-only
      *
-     * Ticket 09 D11's trusted-shell policy is unchanged and deepening does not widen it. Whether a
+     * The trusted-shell policy is unchanged (ticket 09 D11) and deepening does not widen it. Whether a
      * *browser* may ever be handed a tree baked through this door is a disclosure decision, not a depth
-     * one, and ticket 45 leaves it open — see its residue on the map.
+     * one, and it remains open (ticket 45).
      */
     public function unfiltered(): Registry
     {

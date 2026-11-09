@@ -23,6 +23,8 @@ use Rushing\Popcorn\Runner\Result;
  * substrate packages (`laravel-popcorn-bubble`, `laravel-popcorn-wasm`). The kernel ships only the
  * contract and the dependency-free `NullRunner` (shipped in `rushing/laravel-popcorn` as
  * `Rushing\Popcorn\Laravel\Runner\NullRunner`).
+ *
+ * @api
  */
 interface Runner
 {

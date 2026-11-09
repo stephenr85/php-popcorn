@@ -9,6 +9,8 @@ namespace Rushing\Popcorn\Runner;
  * metering stays backend-blind (popcorn-runner tickets 03, 06).
  *
  * A `null` on any axis means "unset" — the host/substrate default applies (no ceiling authored).
+ *
+ * @api
  */
 class Limits
 {

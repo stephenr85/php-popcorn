@@ -16,12 +16,12 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  * would be. There is one keyspace in this kernel and this type does not open a second one — it lets a
  * wire that already spells identities with slashes reach into the one that exists.
  *
- * That is what makes the translation lossless in **both** directions, which registry-kernel ticket 58
- * D5 made the requirement for `NavKindRegistry`: `nav/link` is also the `kind` discriminator clients
- * parse, so a one-way `keyFor()` would not have been enough. Forward is {@see of()}; back is
- * {@see fromSegments()}, and the three hand-rolled translators D1 found (`ConduitCapabilityRegistry::
- * addressOf()`, `CapabilityLadder::resolveReference()`, `SchemaOrgRegistry::keyFor()`) collapse into
- * this pair.
+ * That is what makes the translation lossless in **both** directions, which is a requirement for
+ * a registry such as `NavKindRegistry` (registry-kernel ticket 58 D5): `nav/link` is also the `kind`
+ * discriminator clients parse, so a one-way `keyFor()` would not be enough. Forward is {@see of()};
+ * back is {@see fromSegments()}, and hand-rolled translators such as
+ * `ConduitCapabilityRegistry::addressOf()`, `CapabilityLadder::resolveReference()` and
+ * `SchemaOrgRegistry::keyFor()` collapse into this pair.
  *
  * ## Relative-only, and that is the decision rather than a limitation
  *
@@ -47,6 +47,8 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  * stamping was needed**, never a `Key` sometimes and a `RelativeUriKey` other times. A storage type
  * that depended on whether the caller had already spelled the root would be the dual-mode defect above,
  * one tier down.
+ *
+ * @api
  */
 class RelativeUriKey implements Rootable
 {
@@ -125,8 +127,8 @@ class RelativeUriKey implements Rootable
      * Always a {@see Key} — see the class docblock's "it does not survive the door".
      *
      * The stamping RULE itself is not restated here; it is delegated to `Key` so there is exactly one
-     * place that decides what "already under the root" means. Registry-kernel ticket 41 D11's *"a
-     * restated argument is a place to drift"*, applied before the drift rather than after it.
+     * place that decides what "already under the root" means. *A restated argument is a place to
+     * drift* (registry-kernel ticket 41 D11), so this avoids the drift before it can happen.
      */
     public function underRoot(Key $root): RegistryKey
     {

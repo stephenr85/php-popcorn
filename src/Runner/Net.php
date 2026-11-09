@@ -15,6 +15,8 @@ namespace Rushing\Popcorn\Runner;
  *   is honored at the substrate as "egress on".
  * - {@see Net::Open}   — unrestricted egress, a first-class (trust-gated) declaration
  *   for dynamically-wired external-service transforms that cannot enumerate destinations.
+ *
+ * @api
  */
 enum Net: string
 {

@@ -54,20 +54,20 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  *   rung, and **assigned by nothing, fleet-wide**. The branch was unreachable for its whole life
  *   (registry-kernel ticket 36 D3).
  * - `CapabilityLadder::$aliases` — the surviving half, with **one member estate-wide**
- *   (`url_import` → `ingest-urls`). Registry-kernel ticket 66 deleted it after measuring the stored
- *   vocabulary across every tenant: **zero rows spoke `url_import`.** Meanwhile `get_fragments` (4
- *   rows) and `intake_form` (1) — two names the rung had never aliased — needed a real data
- *   migration. *The alias was guarding the only name nobody used.*
+ *   (`url_import` → `ingest-urls`). It was deleted after measuring the stored vocabulary across
+ *   every tenant (registry-kernel ticket 66): **zero rows spoke `url_import`.** Meanwhile
+ *   `get_fragments` (4 rows) and `intake_form` (1) — two names the rung had never aliased — needed
+ *   a real data migration. *The alias was guarding the only name nobody used.*
  * - The flagship's `AliasEntry[]` route table — one producer, zero consumers, no test. It drifted
  *   silently (still routing `/circuit-runs` to `/system` long after the section moved) and disagreed
  *   with the client about `/operator`, with the client winning because the server's copy was inert.
- *   Deleted by realm-and-floor-reconciliation ticket 01.
+ *   It has been deleted (realm-and-floor-reconciliation ticket 01).
  *
  * **The mechanism is self-concealing, which is why the census reads zero rather than small.** An
  * alias makes a rename resolve without making the stored vocabulary correct: two names work, one is
  * recorded, and no query can tell you which callers still speak the old one. So an alias cannot be
- * measured *while it is load-bearing* — it can only be measured after someone deletes it. Ticket 66's
- * conclusion, which is the doctrine here: **migrate the vocabulary at the source, once, rather than
+ * measured *while it is load-bearing* — it can only be measured after someone deletes it. The
+ * doctrine here (registry-kernel ticket 66): **migrate the vocabulary at the source, once, rather than
  * translating it on every read forever by a map nobody re-measures.** Compare
  * `Splicewire\Tower\Data\Filters\ThreadFilterData`, which declines an alias in one line — *"an alias
  * would buy backward compatibility for a key no caller can be holding."*
@@ -80,8 +80,8 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * membership. Neither side is a {@see RegistryKey}, and nothing a kernel primitive could offer would
  * serve it. A one-instance shape that is not even an instance is not a two-beneficiary case.
  *
- * **And the design has a cost the proposal does not price.** Ticket 66's *"enforce the same resolving
- * `entryType`"* is the easy half; the hard half is {@see OnKeyDuplicate}. The prior-art survey found
+ * **And a kernel alias has a cost that is easy to overlook.** Requiring an alias to *"enforce the
+ * same resolving `entryType`"* (registry-kernel ticket 66) is the easy half; the hard half is {@see OnKeyDuplicate}. The prior-art survey found
  * systemd and NixOS reaching the same answer independently — systemd loads drop-ins for *"the aliased
  * name and all aliases"*, and NixOS's `mkRenamedOptionModule` wraps aliased definitions in `mkMerge`,
  * documenting that *"'to' Options whose types don't support merging … are not well-supported"*. So
@@ -150,6 +150,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * written, and a third place it can drift from the other two (ticket 07 D4 / 01 D10).
  *
  * @template TEntry
+ * @api
  */
 interface Registry
 {
@@ -227,9 +228,9 @@ interface Registry
      * publish both halves — the throwing accessor over `resolve()` AND its nullable twin over
      * `tryResolve()`, on Laravel's `findOrFail()`/`find()` split. Publishing only the throwing half
      * leaves a host either catching a kernel exception it never imported or paying a
-     * `has()`-then-`get()` double lookup, and it is how ticket 38's sweep turned two asserted 404s in
-     * the flagship into 500s: the port's miss changed type under a host's `catch`, and no nullable
-     * accessor existed to move to. Whichever half the port already had keeps its behaviour; the
+     * `has()`-then-`get()` double lookup. It is also how a port to the kernel can turn an asserted
+     * 404 into a 500 (ticket 38): the port's miss changes type under a host's `catch`, and no
+     * nullable accessor exists to move to. Whichever half the port already had keeps its behaviour; the
      * migration ADDS the missing one, it never re-points the existing one.
      *
      * @return TEntry|null

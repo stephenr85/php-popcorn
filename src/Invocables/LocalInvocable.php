@@ -6,7 +6,11 @@ use Closure;
 use Rushing\Popcorn\Binding;
 use Rushing\Popcorn\Contracts\Invocable;
 
-/** An invocable backed by a local PHP handler — the in-process default. */
+/**
+ * An invocable backed by a local PHP handler — the in-process default.
+ *
+ * @api
+ */
 class LocalInvocable implements Invocable
 {
     private Closure $handler;

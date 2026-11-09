@@ -10,6 +10,8 @@ use Rushing\Popcorn\Ladders\Ladder;
  * serializes to one stable string. A {@see Result} is *total*: every run, success or failure,
  * carries exactly one of these — exceptions are reserved for kernel/programmer errors
  * (an unparseable {@see Manifest}), never run outcomes.
+ *
+ * @api
  */
 enum Outcome: string
 {

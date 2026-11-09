@@ -22,6 +22,8 @@ use Rushing\Popcorn\Registries\RegistryKey;
  * Spring is the model for the shape: `NoUniqueBeanDefinitionException extends
  * NoSuchBeanDefinitionException` and exposes the candidates found, rather than flattening ambiguity
  * into "not found". {@see AmbiguousRegistryMatch} is that subclass here.
+ *
+ * @api
  */
 class RegistryMiss extends RuntimeException
 {

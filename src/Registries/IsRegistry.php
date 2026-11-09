@@ -16,6 +16,8 @@ use ReflectionClass;
  *
  * `entryType` identifies what entries hold. `description` explains the registry's purpose and use
  * where that helps a consumer. Read behavior belongs to the registry and its consumers.
+ *
+ * @api
  */
 #[Attribute(Attribute::TARGET_CLASS)]
 class IsRegistry
@@ -52,9 +54,8 @@ class IsRegistry
      * mechanism** — beam-core's `registerDefaults()` is an overridable hook, and swapping in an anonymous
      * subclass to prove a facade is fakeable is a live test idiom. Without the walk, such a subclass is
      * not merely invisible to the conformance audits (the mild half); it **cannot be constructed at all**,
-     * because {@see BasicRegistry::for()} reads `static::class` and throws on a missing declaration.
-     * Registry-kernel ticket 41 D11 decided the walk and ticket 42 landed it, after ticket 28 found the
-     * fatal half in `laravel-graphine`'s own suite.
+     * because {@see BasicRegistry::for()} reads `static::class` and throws on a missing declaration
+     * (registry-kernel tickets 28, 41 D11 and 42).
      *
      * **Nearest wins**, so a subclass that wants its own branch of the keyspace still takes it by
      * declaring — `Rushing\DataNav\NavInvocableRegistry` is the estate's exemplar. Inheriting and

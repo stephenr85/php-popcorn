@@ -17,6 +17,8 @@ use Rushing\Popcorn\Contracts\Runner;
  * in-band reflected Grant, the audit log, and the meter lie about what took effect).
  *
  * Immutable by convention (matches the package's no-`readonly` house style).
+ *
+ * @api
  */
 class Grant
 {

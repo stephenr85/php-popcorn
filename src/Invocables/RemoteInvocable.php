@@ -12,6 +12,8 @@ use Rushing\Popcorn\Contracts\Invocable;
  * is injected (`fn(string $name, array $input): array`) so this kernel depends on
  * no HTTP or MCP client; the host plugs whichever it uses. This is how a tenant
  * overrides a named capability with their own remote handler.
+ *
+ * @api
  */
 class RemoteInvocable implements Invocable
 {

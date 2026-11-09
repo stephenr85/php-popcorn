@@ -7,10 +7,10 @@ namespace Rushing\Popcorn\Registries;
  * {@see Registry::register()} already writes.
  *
  * Like {@see RecordsSupersession}, this interface **exposes** a recording rather than switching one on.
- * `$by` has been written on every entry since ticket 06 D11; what did not exist until registry-kernel
- * ticket 48 was any way to read it back for a LIVE entry. `Registry`'s seven methods are `register`,
- * `has`, `resolve`, `tryResolve`, `matches`, `keys`, `unfiltered` — not one of them returns it. Ticket
- * 29 D2 needed `ReflectionProperty` to see the data at all, and {@see Superseded::$by} exposed it only
+ * `$by` is written on every entry (ticket 06 D11); this is the way to read it back for a LIVE entry
+ * (registry-kernel ticket 48). `Registry`'s seven methods are `register`, `has`, `resolve`,
+ * `tryResolve`, `matches`, `keys`, `unfiltered` — not one of them returns it. Without this interface
+ * the data is reachable only through `ReflectionProperty`, and {@see Superseded::$by} exposes it only
  * for the DEAD entry, never the live one.
  *
  * ## Why this is on an interface rather than on `Registry`
@@ -52,13 +52,15 @@ namespace Rushing\Popcorn\Registries;
  *
  * ## What this deliberately does NOT do
  *
- * **It does not fix what `$by` SAYS.** Ticket 29 D2 measured the live content and it is near-degenerate:
- * 38 entries, **13 carry `$by`**, and of 10 distinct registrants **8 are the registering registry's own
+ * **It does not fix what `$by` SAYS.** A measurement of the live content found it near-degenerate
+ * (ticket 29 D2): 38 entries, **13 carry `$by`**, and of 10 distinct registrants **8 are the registering registry's own
  * class**, plus `extend` ×3 from graphine's `Manager` delegation. Nothing today names a *package* or a
  * *provider*. The vocabulary now lives on {@see Registrant} (`vendor/name`, `config:<key>`,
  * `class:<FQCN>`), with a scoped default that names the package for writes that name nobody; until
  * providers adopt it, a discriminator built over this field would be reading a tautology. `null` is
  * legal and stays legal.
+ *
+ * @api
  */
 interface RecordsRegistrants
 {
@@ -77,7 +79,7 @@ interface RecordsRegistrants
      * {@see Forgettable::forgetBy()}.
      *
      * Exact string match, not a prefix or a glob. A registrant vocabulary that wants hierarchy should
-     * say so in tickets 37/38 rather than have the kernel guess at one, and matching loosely here
+     * define it explicitly (tickets 37/38) rather than have the kernel guess at one, and matching loosely here
      * would make `keysBy()` and `forgetBy()` disagree about what they select — which, given one of them
      * deletes, is the worst possible place for a near-miss.
      *

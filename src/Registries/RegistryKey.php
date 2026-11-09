@@ -13,6 +13,8 @@ use Stringable;
  * interface, and not on the registry either.
  *
  * Equality is defined on {@see segments()}, NEVER on the source string (ticket 01).
+ *
+ * @api
  */
 interface RegistryKey extends Stringable
 {

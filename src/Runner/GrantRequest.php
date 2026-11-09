@@ -12,6 +12,8 @@ namespace Rushing\Popcorn\Runner;
  *
  * The kernel never *resolves* this — resolution (`effective = requested ∩ policy`) is host-side.
  * This VO only carries the declaration so the host resolver can read it.
+ *
+ * @api
  */
 class GrantRequest
 {

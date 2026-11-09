@@ -7,6 +7,8 @@ namespace Rushing\Popcorn\Ladders;
  * behind, or abstains (returns null) so the ladder demotes to the next rung. The
  * self-validate-and-demote discipline — a strong rung that can't be sure steps
  * aside rather than guessing.
+ *
+ * @api
  */
 interface Rung
 {

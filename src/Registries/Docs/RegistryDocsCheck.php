@@ -33,6 +33,8 @@ namespace Rushing\Popcorn\Registries\Docs;
  *     expect(RegistryDocsCheck::forPackage(dirname(__DIR__))->run()->failures())->toBe([]);
  * });
  * ```
+ *
+ * @api
  */
 final class RegistryDocsCheck
 {

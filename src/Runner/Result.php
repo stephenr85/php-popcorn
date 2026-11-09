@@ -25,6 +25,8 @@ use Throwable;
  * loop). Compute telemetry (`wallMs`/`cpuMs`/`memPeakBytes`/…) is for observability + limit
  * enforcement, **not** presumed to be the billed quantity — the meter reads its quantity off the
  * output via `MeteredInvocable::meterQuantity(Result)`, and a `Binding::Local` run stays free.
+ *
+ * @api
  */
 class Result
 {

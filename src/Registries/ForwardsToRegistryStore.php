@@ -61,6 +61,8 @@ use LogicException;
  * forwarders here call `$this->store()`, which matches neither. So when sugar in the class body reads
  * the store's `resolve()`, give it a `tryResolve()` twin in the class too, or have the sugar read through
  * `$this->resolve()` and `$this->tryResolve()` instead.
+ *
+ * @api
  */
 trait ForwardsToRegistryStore
 {

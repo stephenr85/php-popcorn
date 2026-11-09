@@ -12,6 +12,8 @@ namespace Rushing\Popcorn\Registries;
  * Prior art puts the disambiguation rule at registration time too, everywhere it was surveyed:
  * Spring `@Primary`, OSGi `service.ranking`, systemd load-order. None of them made it a per-call
  * flag, and neither does this — the call site chooses only cardinality, by which method it calls.
+ *
+ * @api
  */
 enum OnKeyDuplicate: string
 {
@@ -75,11 +77,11 @@ enum OnKeyDuplicate: string
      * refuses it loudly as ambiguous. Deterministic refusal, never a silent pick, and never a
      * null-to-empty.
      *
-     * ⚠️ That motivating shape is **not** a declaration of this policy, and this docblock used to say
-     * it was (*"Tower's `CapabilityRegistry` is the exemplar"*). Checked live by registry-kernel
-     * ticket 44: the alias pool and its ambiguity refusal live in
+     * ⚠️ That motivating shape is **not** a declaration of this policy; Tower's `CapabilityRegistry`
+     * is not its exemplar. The alias pool and its ambiguity refusal live in
      * `Splicewire\Tower\Circuit\Capabilities\CapabilityLadder`, which declares no `#[IsRegistry]` at
-     * all; tower's two capability registries both declare `Supersede`. The **declaring** exemplars are
+     * all; tower's two capability registries both declare `Supersede` (registry-kernel ticket 44).
+     * The **declaring** exemplars are
      * `Splicewire\Beam\Rendering\ResourceRenderingRegistry` and
      * `Splicewire\Beam\Realm\RealmOverlayRegistry`. Cite those; the tower story is provenance, not an
      * instance.

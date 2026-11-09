@@ -2,7 +2,11 @@
 
 namespace Rushing\Popcorn\Ladders;
 
-/** What a rung produced: a value, how confident it is, and which rung found it. */
+/**
+ * What a rung produced: a value, how confident it is, and which rung found it.
+ *
+ * @api
+ */
 class RungResult
 {
     public function __construct(

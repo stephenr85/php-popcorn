@@ -30,7 +30,7 @@ use InvalidArgumentException;
  * ## The scoped default
  *
  * Requiring `$by` at every call site across the estate is unaffordable, and inferring it from the
- * call stack is banned (registry-kernel tickets 01 and 06: no `debug_backtrace()`). So a provider
+ * call stack with `debug_backtrace()` is banned (registry-kernel tickets 01 and 06). So a provider
  * states its registrant once, around its registration block:
  *
  * ```php
@@ -53,6 +53,8 @@ use InvalidArgumentException;
  * - **The scope's registrant must be one of the three forms.** It is a default applied to entries
  *   nobody named, so it has to be the vocabulary. A free-form or per-tenant selector belongs in an
  *   explicit `$by`, where its author owns its teardown.
+ *
+ * @api
  */
 class Registrant
 {

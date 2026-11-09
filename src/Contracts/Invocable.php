@@ -8,6 +8,8 @@ use Rushing\Popcorn\Binding;
  * A named, transport-agnostic capability: array in, array out. The contract says
  * nothing about *where* the work happens — a {@see Binding} does. A schema
  * authored locally and one codegen'd remotely converge on this one read path.
+ *
+ * @api
  */
 interface Invocable
 {

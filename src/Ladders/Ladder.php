@@ -8,6 +8,8 @@ namespace Rushing\Popcorn\Ladders;
  * or fall short. Returns null when every rung declines — the caller's reviewer
  * floor. Per-region demotion (a clean front resolved by the strong rung, an
  * ambiguous tail by a weaker one) is just calling climb per region.
+ *
+ * @api
  */
 class Ladder
 {

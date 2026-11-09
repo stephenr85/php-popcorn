@@ -18,16 +18,16 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  *
  * ## It is {@see Rootable} and it DECLINES
  *
- * This is a kernel-owned type, so after ticket 64's widening the door could stamp it — and stamping a
+ * This is a kernel-owned type, so the door could stamp it (ticket 64) — and stamping a
  * dotted root onto one opaque URI segment produces a two-segment key whose first half addresses a
  * branch and whose second half is a URI, which is not an address anyone can resolve or render. So
  * {@see underRoot()} returns `$this`.
  *
  * That is a **decision, not an incapacity**, and the difference is why this implements the interface
  * rather than omitting it: a reader can see the kernel considered stamping here and refused, instead of
- * inferring it from a missing `implements`. The practical consequence is the one ticket 20 D3 named and
- * ticket 64 narrowed — entries keyed this way are not addressable through the global keyspace,
- * reachable as a registry through the index, never through `pop()`.
+ * inferring it from a missing `implements`. The practical consequence: entries keyed this way are
+ * not addressable through the global keyspace — reachable as a registry through the index, never
+ * through `pop()` (tickets 20 D3 and 64).
  *
  * ## The one subclass, and what it may override
  *
@@ -44,6 +44,8 @@ use Rushing\Popcorn\Registries\Exceptions\InvalidRegistryKey;
  * @phpstan-consistent-constructor `of()` is `new static`, so a subclass inherits the parse-and-refuse
  * gate instead of silently returning a base instance. The one subclass overrides `of()` outright and
  * keeps the constructor signature verbatim, which is what this annotation asserts.
+ *
+ * @api
  */
 class AbsoluteUriKey implements Rootable
 {

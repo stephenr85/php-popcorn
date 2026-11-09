@@ -40,6 +40,8 @@ use Throwable;
  * encoded bytes, never of decoded values, so a JSON round-trip's scalar changes (`38.0` → `38`) can't hide on one side.
  *
  * An example must be deterministic: no minted ids, clocks or random values. A nondeterministic example shows up as drift.
+ *
+ * @api
  */
 final class DataExamples
 {
