@@ -150,6 +150,7 @@ use Rushing\Popcorn\Registries\Exceptions\RegistryMiss;
  * written, and a third place it can drift from the other two (ticket 07 D4 / 01 D10).
  *
  * @template TEntry
+ *
  * @api
  */
 interface Registry

@@ -73,6 +73,7 @@ use Rushing\Popcorn\Registries\Exceptions\UnregisteredRegistry;
  * has no business claiming to.
  *
  * @implements Registry<Registry<mixed>>
+ *
  * @api
  */
 #[IsRegistry(

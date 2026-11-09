@@ -57,6 +57,7 @@ use Rushing\Popcorn\Registries\RegistryNode;
  * and softening them would put a guess back at the door.
  *
  * @implements Registry<Invocable>
+ *
  * @api
  */
 #[IsRegistry(
