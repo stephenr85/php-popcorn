@@ -148,11 +148,7 @@ class ProcessSession implements Session
             }
 
             $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => $stderr];
-            [$process, $pipes] = ($spawn ?? static function (array $argv, array $descriptors, ?string $cwd, array $env): array {
-                $process = @proc_open($argv, $descriptors, $pipes, $cwd, $env);
-
-                return [$process, $pipes ?? []];
-            })($argv, $descriptors, $cwd, $env);
+            [$process, $pipes] = ($spawn ?? self::spawn(...))($argv, $descriptors, $cwd, $env);
 
             if (! is_resource($process)) {
                 $process = null;
@@ -168,7 +164,7 @@ class ProcessSession implements Session
             }
 
             $status = proc_get_status($process);
-            $session = new self($process, $pipes, $stderr, $path, $sandboxed, $grant, $status['pid'] ?? null);
+            $session = new self($process, $pipes, $stderr, $path, $sandboxed, $grant, $status['pid']);
             $session->observe($status);
 
             return $session;
@@ -177,6 +173,22 @@ class ProcessSession implements Session
 
             return new RefusedSession(Result::substrateUnavailable('popcorn: the session launch failed ('.$e::class.': '.$e->getMessage().').'), $grant);
         }
+    }
+
+    /**
+     * The default spawn: `proc_open` with exactly the given argv, descriptors, cwd and environment. `$pipes` is always
+     * assigned by `proc_open` (empty when it fails).
+     *
+     * @param  list<string>  $argv
+     * @param  array<int, array{0: string, 1: string}|resource>  $descriptors
+     * @param  array<string, string>  $env
+     * @return array{0: resource|false, 1: array<int, resource>}
+     */
+    private static function spawn(array $argv, array $descriptors, ?string $cwd, array $env): array
+    {
+        $process = @proc_open($argv, $descriptors, $pipes, $cwd, $env);
+
+        return [$process, $pipes];
     }
 
     /**
@@ -336,12 +348,14 @@ class ProcessSession implements Session
                 @fclose($this->pipes[0]);
             }
 
-            if (! $this->waitForExit()) {
+            $process = $this->process;
+
+            if (is_resource($process) && ! $this->waitForExit()) {
                 $hostEnded = true;
-                @proc_terminate($this->process, 15);
+                @proc_terminate($process, 15);
 
                 if (! $this->waitForExit()) {
-                    @proc_terminate($this->process, 9);
+                    @proc_terminate($process, 9);
                     $this->waitForExit();
                 }
             }
@@ -451,6 +465,12 @@ class ProcessSession implements Session
     }
 
     /** Wait up to the grace period for the child to exit; true when it has. */
+    /**
+     * Whether the child has exited within the grace period. Impure: it polls the child and the clock, so two calls in a
+     * row can answer differently (the second follows a signal).
+     *
+     * @phpstan-impure
+     */
     private function waitForExit(): bool
     {
         $deadline = microtime(true) + self::GRACE_MS / 1000;
