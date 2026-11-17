@@ -94,8 +94,10 @@ class ProcessSession implements Session
 
     /**
      * Launch `$argv` with exactly `$env` and return the live session, or a {@see RefusedSession} when
-     * the launch itself could not happen. A binary that cannot be executed is not a refusal: the child
-     * starts, exits 127, and the session closes as `NonZeroExit`.
+     * the launch itself could not happen. What a binary that cannot be executed gives depends on how the
+     * platform's `proc_open` spawns: where posix_spawn refuses it (observed on macOS with PHP 8.4), the spawn returns
+     * false and the launch is a `SubstrateUnavailable` refusal; where a fork succeeds and only the exec fails, the
+     * child starts, exits 127, and the session closes as `NonZeroExit`. Either way nothing is thrown or left behind.
      *
      * @param  list<string>  $argv
      * @param  array<string, string>  $env
@@ -176,8 +178,11 @@ class ProcessSession implements Session
     }
 
     /**
-     * The default spawn: `proc_open` with exactly the given argv, descriptors, cwd and environment. `$pipes` is always
-     * assigned by `proc_open` (empty when it fails).
+     * The default spawn: `proc_open` with exactly the given argv, descriptors, cwd and environment. `$pipes` starts as
+     * an empty array because `proc_open` does NOT always assign it: when the spawn itself fails (posix_spawn or fork
+     * failing, a missing binary on a posix_spawn platform) it returns false before it initialises the out parameter,
+     * which would otherwise stay null (amend, fresh Claude review of PRR03 unit 2). The caller's total acquisition
+     * relies on getting an array back either way.
      *
      * @param  list<string>  $argv
      * @param  array<int, array{0: string, 1: string}|resource>  $descriptors
@@ -186,6 +191,7 @@ class ProcessSession implements Session
      */
     private static function spawn(array $argv, array $descriptors, ?string $cwd, array $env): array
     {
+        $pipes = [];
         $process = @proc_open($argv, $descriptors, $pipes, $cwd, $env);
 
         return [$process, $pipes];
@@ -464,7 +470,6 @@ class ProcessSession implements Session
         return trim($stderr) !== '' ? trim($this->tail($stderr, 2048)) : "popcorn: the session process {$what}.";
     }
 
-    /** Wait up to the grace period for the child to exit; true when it has. */
     /**
      * Whether the child has exited within the grace period. Impure: it polls the child and the clock, so two calls in a
      * row can answer differently (the second follows a signal).

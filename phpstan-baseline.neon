@@ -3,10 +3,13 @@
 # MEASUREMENT gap at a package boundary, which is this ticket's own thesis pointed back at itself, and no
 # edit inside `src/` can close it.
 #
-# `HandlesRunnerIo` had the same entry until popcorn-runner-rehome 03: `ProcessSession` now uses it inside
-# `src/`, so it is analysed and the entry stopped matching (`ignore.unmatched`). A base run on 011c15ca with
-# the same dependency set matched it, so the change, not the baseline, made it stale (control A, PRR03
-# unit 2). The entry is removed, not widened.
+# `HandlesRunnerIo` had the same entry until popcorn-runner-rehome 03.
+# - MEASURED (control A, PRR03 unit 2): on 011c15ca, with the same dependency set and command, PHPStan reported
+#   no errors and this entry matched; on the candidate it was reported `ignore.unmatched`.
+# - INFERRED (source reading, not measured): 011c15ca has no `ProcessSession`; the candidate's
+#   `ProcessSession` (`use HandlesRunnerIo;`) makes the trait used and analysed inside `src/`, which is why
+#   the entry stopped matching.
+# The entry is removed, not widened.
 #
 # Everything else is gone. 38 → 21 (ticket 46) → 2 (ticket 50) → 1 (popcorn-runner-rehome 03), by fixing
 # contracts, not by widening. A ratchet a feature can widen is not a ratchet.

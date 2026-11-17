@@ -118,6 +118,53 @@ it('turns a spawn that returns no process into a refusal and unlinks the stderr 
         ->and(leftIn($dir))->toBe([]);
 });
 
+// --- PRR03 unit 2 amend (fresh Claude review, blocking): the DEFAULT spawn failing, with no injected seam --------
+// A missing absolute binary reaches the real proc_open. Which path that takes is the platform's: posix_spawn refuses
+// it (proc_open returns false WITHOUT assigning $pipes), or a fork succeeds and the child exits 127. Each case asserts
+// its own path; on the other path it still proves nothing was thrown or left, then says which path this platform took.
+
+function missingBinary(): string
+{
+    return '/nonexistent/popcorn-default-spawn-'.bin2hex(random_bytes(4));
+}
+
+it('DEFAULT spawn, posix_spawn path: a binary the spawn refuses is a refusal, nothing thrown, nothing left', function () {
+    $dir = trackedDir();
+
+    $session = ProcessSession::start([missingBinary()], [], false, Grant::none(), null, $dir);
+
+    if ($session->refusal() === null) {
+        $session->close();
+        expect(leftIn($dir))->toBe([]);
+        $this->markTestSkipped('PATH NOT TAKEN here: this platform started a child for the missing binary (fork/exec); the fork/exec case below asserts it.');
+    }
+
+    expect($session)->toBeInstanceOf(RefusedSession::class)
+        ->and($session->refusal()?->outcome)->toBe(Outcome::SubstrateUnavailable)
+        ->and($session->refusal()?->error)->toContain('could not spawn')
+        ->and(leftIn($dir))->toBe([]);
+});
+
+it('DEFAULT spawn, fork/exec path: the child exits 127, closes as NonZeroExit, nothing thrown, nothing left', function () {
+    $dir = trackedDir();
+
+    $session = ProcessSession::start([missingBinary()], [], false, Grant::none(), null, $dir);
+
+    if ($session->refusal() !== null) {
+        expect(leftIn($dir))->toBe([]);
+        $this->markTestSkipped('PATH NOT TAKEN here: this platform refused the missing binary at spawn (posix_spawn); the posix_spawn case above asserts it.');
+    }
+
+    $pid = $session->pid();
+    $result = $session->close();
+
+    expect($result->outcome)->toBe(Outcome::NonZeroExit)
+        ->and($result->exitCode)->toBe(127)
+        ->and($pid)->toBeInt()
+        ->and(pidIsAlive((int) $pid))->toBeFalse()
+        ->and(leftIn($dir))->toBe([]);
+});
+
 it('releases a PARTIAL acquisition: a started child without both pipes is killed and reaped, nothing is left', function () {
     $dir = trackedDir();
     $pid = null;
