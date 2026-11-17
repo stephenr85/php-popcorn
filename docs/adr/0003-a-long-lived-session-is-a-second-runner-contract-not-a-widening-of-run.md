@@ -80,3 +80,30 @@ the name at spawn. It does not attribute the name to any library; that trace is 
 removes only that name, only for a PHP child on Darwin, and only when the Grant did not carry it. The check then
 requires exact equality with the Grant, so any other extra name, on any platform, still fails. There is no pattern,
 no allow-any and no skip. A new entry needs a new ruling, and the test that pins the list changes with it.
+
+## Amendment 2026-11-17 (root ruling cb7f7936, PRR03 P4: retained stderr capped per host call)
+
+This replaces the first amendment's "Diagnostics are bounded in memory" mechanism. That one wrote the kept tail back into
+the file, and its residual is restated below.
+
+- **The host never writes into the stderr file, and reads it through its own handle.** The child keeps its `O_APPEND`
+  descriptor. The host opens a separate read-only handle, its own open file description with its own offset, so the
+  child's appends cannot move what the host reads.
+- **A compaction starts a new epoch.** On `send`, `receive` or `isRunning`, once the file passes
+  `STDERR_COMPACT_BYTES`, the host keeps the epoch's last `STDERR_TAIL_BYTES` in memory and truncates the file to 0.
+  Nothing is written back, so the child's next append begins the new epoch in true order: retained bytes are never
+  reordered.
+- **Loss is possible on every compaction, and is reported.** A byte the child, or a descendant sharing its stderr,
+  writes between the compaction's size read and its truncate is destroyed unseen. The host cannot observe that window,
+  so every compaction sets `Result::$stderrLossPossible`. Not seeing the size change is never taken as proof of no loss.
+- **The counts are lower bounds.** `stderrBytesObservedAtLeast` is the sum of each truncated epoch's size plus the final
+  size. `stderrBytesOmittedAtLeast` is that minus the child bytes returned, so it includes the final trim at close. A
+  held copy is never written back and so never counted twice. Neither field is an exact total. Both are set only by a
+  session; a one-shot `run()` Result serialises exactly as before.
+- **The marker.** When anything was omitted, or loss is possible, `stderr` begins with one ASCII line,
+  `[popcorn: stderr truncated: at least N of at least M observed bytes omitted; R bytes retained in write order…]`,
+  extended with the possible-loss clause when it applies. A `[popcorn: possible gap]` line separates held bytes from
+  the final epoch's. The whole string, marker included, is at most `STDERR_TAIL_BYTES`. The child's bytes appear in
+  the order written, but are not promised contiguous once anything was omitted.
+- **Residual boundary: a per-call cap, NOT a continuous disk bound.** Between two host calls a child can grow the file
+  on disk without limit, and after a compaction it appends again. Memory stays at most two tails.

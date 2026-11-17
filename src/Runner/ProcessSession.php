@@ -27,13 +27,19 @@ use Throwable;
  * - {@see close()} closes stdin first, gives the child a grace period to leave on its own, then
  *   SIGTERM, then SIGKILL. A child the host had to stop closes as `Success` with the signal recorded:
  *   ending a session is the host's call, not the child's failure.
- * - **Diagnostics are bounded** (amend, finding 4). `close()` reads only the last {@see STDERR_TAIL_BYTES}
- *   (seek from the file's size; never the whole file into memory), and every `send()`/`receive()`/
- *   `isRunning()` COMPACTS the file to that tail once it passes {@see STDERR_COMPACT_BYTES}. The child
- *   writes through an O_APPEND descriptor, so after a compaction it keeps appending at the new end.
- *   RESIDUAL BOUNDARY: compaction runs only on those host calls, so between two calls a child can grow the
- *   file on disk without limit, and bytes written between the compaction's tail read and its truncate
- *   are lost (`stderrTruncated` is then true). Memory use at close stays bounded either way.
+ * - **Retained stderr is capped per host call, with an explicit marker and lower-bound counts** (PRR03 P4, root
+ *   `cb7f7936`; ADR-0003). The child writes through its O_APPEND descriptor. The host reads ONLY through a separate
+ *   read-only handle (its own offset, never moved by the child's appends) and NEVER writes into the file:
+ *   - every `send()`/`receive()`/`isRunning()` COMPACTS once the file passes {@see STDERR_COMPACT_BYTES}: it keeps
+ *     the file's last {@see STDERR_TAIL_BYTES} in host memory, then truncates the file to 0, so the child's later
+ *     appends start a new epoch in true order;
+ *   - a byte the child (or a descendant sharing its stderr) writes between the compaction's size read and its
+ *     truncate is destroyed unseen. That window cannot be observed, so EVERY compaction sets `stderrLossPossible`;
+ *   - `close()` returns at most {@see STDERR_TAIL_BYTES} bytes in total, the explicit marker and gap lines included.
+ *     The child's bytes appear in the order written, but are not promised contiguous once anything was omitted;
+ *   - `stderrBytesObservedAtLeast` and `stderrBytesOmittedAtLeast` are LOWER bounds, never exact totals.
+ *   RESIDUAL BOUNDARY: this is a cap per host call, NOT a continuous disk bound. Between two host calls a child can
+ *   grow the file on disk without limit, and after a compaction it appends again. Memory stays at most two tails.
  * - `close()` is idempotent and exception-safe: the file is unlinked and the Result cached in a `finally`,
  *   and it also runs from the destructor, so an abandoned session never leaks a process or a file.
  *
@@ -48,8 +54,13 @@ class ProcessSession implements Session
 
     private const POLL_US = 10000;
 
-    /** Once the stderr file passes this size, a host call compacts it to its last STDERR_TAIL_BYTES. */
+    /** Once the stderr file passes this size, a host call compacts it, keeping its last STDERR_TAIL_BYTES in memory. */
     public const STDERR_COMPACT_BYTES = 1048576; // 1 MiB
+
+    /** Room kept, within STDERR_TAIL_BYTES, for the marker and gap lines close() prepends or inserts. */
+    private const STDERR_MARKER_RESERVE = 512;
+
+    private const STDERR_GAP = "[popcorn: possible gap]\n";
 
     /** @var resource|null */
     private $process;
@@ -57,8 +68,11 @@ class ProcessSession implements Session
     /** @var array<int, resource> */
     private array $pipes;
 
-    /** @var resource|null the O_APPEND handle shared with the child's stderr */
+    /** @var resource|null the O_APPEND handle shared with the child's stderr (the host only truncates through it) */
     private $stderr;
+
+    /** @var resource|null the host's own read-only handle on the stderr file: its offset is never the child's */
+    private $stderrRead;
 
     private bool $exited = false;
 
@@ -68,7 +82,15 @@ class ProcessSession implements Session
 
     private ?Result $result = null;
 
-    private bool $stderrDropped = false;
+    /** The last STDERR_TAIL_BYTES of the epochs already truncated away, held in host memory (never written back). */
+    private string $stderrHeld = '';
+
+    /** Lower bound: bytes of child stderr the host has observed in truncated epochs. */
+    private int $stderrObserved = 0;
+
+    private int $stderrEpochs = 0;
+
+    private bool $stderrLossPossible = false;
 
     private float $startedAt;
 
@@ -76,19 +98,23 @@ class ProcessSession implements Session
      * @param  resource  $process
      * @param  array<int, resource>  $pipes
      * @param  resource  $stderr
+     * @param  resource  $stderrRead
      */
     private function __construct(
         $process,
         array $pipes,
         $stderr,
+        $stderrRead,
         private string $stderrFile,
         private bool $sandboxed,
         private Grant $grant,
         private ?int $pid,
+        private ?Closure $stderrProbe = null,
     ) {
         $this->process = $process;
         $this->pipes = $pipes;
         $this->stderr = $stderr;
+        $this->stderrRead = $stderrRead;
         $this->startedAt = microtime(true);
     }
 
@@ -105,6 +131,10 @@ class ProcessSession implements Session
      * @param  ?Closure  $spawn  @internal failure-injection seam for tests:
      *                           fn(array $argv, array $descriptors, ?string $cwd, array $env): array{0: mixed, 1: array}
      *                           returning [process, pipes]; default is `proc_open`
+     * @param  ?Closure  $stderrProbe  @internal interleaving seam for tests: fn(string $point, resource $writeHandle): void,
+     *                                 called during a compaction at `after-stat`, `after-seek` and `after-truncate`
+     *                                 (and at `after-seek` when close() reads), so a test can write bytes at an exact
+     *                                 point instead of racing a real child. Never set in production.
      */
     public static function start(
         array $argv,
@@ -114,6 +144,7 @@ class ProcessSession implements Session
         ?string $cwd = null,
         ?string $stderrDir = null,
         ?Closure $spawn = null,
+        ?Closure $stderrProbe = null,
     ): Session {
         $invalid = self::invalidLaunch($argv, $env, $cwd);
 
@@ -123,6 +154,7 @@ class ProcessSession implements Session
 
         $path = null;
         $stderr = null;
+        $stderrRead = null;
         $process = null;
         $pipes = [];
 
@@ -149,29 +181,39 @@ class ProcessSession implements Session
                 throw new \RuntimeException('could not reopen the stderr file for append');
             }
 
+            // The host's own read handle, opened BEFORE the spawn: a separate open file description, so the child's
+            // O_APPEND writes never move the offset the host reads from. A failure here is a pre-spawn refusal.
+            $stderrRead = @fopen($path, 'r');
+
+            if ($stderrRead === false) {
+                $stderrRead = null;
+
+                throw new \RuntimeException('could not open the stderr file for reading');
+            }
+
             $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => $stderr];
             [$process, $pipes] = ($spawn ?? self::spawn(...))($argv, $descriptors, $cwd, $env);
 
             if (! is_resource($process)) {
                 $process = null;
-                self::abandon(null, $pipes, $stderr, $path);
+                self::abandon(null, $pipes, $stderr, $path, $stderrRead);
 
                 return new RefusedSession(Result::substrateUnavailable("popcorn: could not spawn `{$argv[0]}`."), $grant);
             }
 
             if (! is_resource($pipes[0] ?? null) || ! is_resource($pipes[1] ?? null)) {
-                self::abandon($process, $pipes, $stderr, $path);
+                self::abandon($process, $pipes, $stderr, $path, $stderrRead);
 
                 return new RefusedSession(Result::substrateUnavailable("popcorn: `{$argv[0]}` started without both stdio pipes; it was stopped."), $grant);
             }
 
             $status = proc_get_status($process);
-            $session = new self($process, $pipes, $stderr, $path, $sandboxed, $grant, $status['pid']);
+            $session = new self($process, $pipes, $stderr, $stderrRead, $path, $sandboxed, $grant, $status['pid'], $stderrProbe);
             $session->observe($status);
 
             return $session;
         } catch (Throwable $e) {
-            self::abandon($process, $pipes, $stderr, $path);
+            self::abandon($process, $pipes, $stderr, $path, $stderrRead);
 
             return new RefusedSession(Result::substrateUnavailable('popcorn: the session launch failed ('.$e::class.': '.$e->getMessage().').'), $grant);
         }
@@ -230,15 +272,23 @@ class ProcessSession implements Session
     }
 
     /**
-     * Release a partial acquisition: kill and reap the child, close every pipe and the stderr handle, unlink
+     * Release a partial acquisition: kill and reap the child, close every pipe and both stderr handles, unlink
      * the file. Each step is attempted on its own; none may throw out of here.
      *
      * @param  mixed  $process
      * @param  array<int, mixed>  $pipes
      * @param  mixed  $stderr
+     * @param  mixed  $stderrRead
      */
-    private static function abandon($process, array $pipes, $stderr, ?string $path): void
+    private static function abandon($process, array $pipes, $stderr, ?string $path, $stderrRead = null): void
     {
+        try {
+            if (is_resource($stderrRead)) {
+                @fclose($stderrRead);
+            }
+        } catch (Throwable) {
+        }
+
         foreach ($pipes as $pipe) {
             try {
                 if (is_resource($pipe)) {
@@ -346,7 +396,8 @@ class ProcessSession implements Session
 
         $hostEnded = false;
         $stderr = '';
-        $truncated = $this->stderrDropped;
+        $observed = $this->stderrObserved;
+        $omitted = 0;
         $readError = null;
 
         try {
@@ -380,15 +431,19 @@ class ProcessSession implements Session
                 }
             }
 
-            [$stderr, $tailTruncated] = $this->readTail();
-            $truncated = $truncated || $tailTruncated;
+            [$stderr, $observed, $omitted] = $this->finalStderr();
         } catch (Throwable $e) {
             $readError = 'popcorn: closing the session failed ('.$e::class.': '.$e->getMessage().')';
+            // Nothing of what was observed is returned, so all of it counts as omitted (still a lower bound).
+            $stderr = '';
+            $omitted = $observed;
         } finally {
-            self::abandon($this->process, $this->pipes, $this->stderr, $this->stderrFile);
+            self::abandon($this->process, $this->pipes, $this->stderr, $this->stderrFile, $this->stderrRead);
             $this->process = null;
             $this->pipes = [];
             $this->stderr = null;
+            $this->stderrRead = null;
+            $this->stderrHeld = '';
 
             $wallMs = (int) round((microtime(true) - $this->startedAt) * 1000);
             $clean = $readError === null && ($hostEnded || $this->exitCode === 0);
@@ -396,12 +451,15 @@ class ProcessSession implements Session
             $this->result = new Result(
                 $clean ? Outcome::Success : Outcome::NonZeroExit,
                 stderr: $stderr,
-                stderrTruncated: $truncated,
+                stderrTruncated: $omitted > 0 || $this->stderrLossPossible,
                 error: $clean ? null : ($readError ?? $this->failureMessage($stderr)),
                 wallMs: $wallMs,
                 exitCode: $this->exitCode,
                 signal: $this->signal,
                 sandboxed: $this->sandboxed,
+                stderrBytesObservedAtLeast: $observed,
+                stderrBytesOmittedAtLeast: $omitted,
+                stderrLossPossible: $this->stderrLossPossible,
             );
         }
 
@@ -413,31 +471,49 @@ class ProcessSession implements Session
         $this->close();
     }
 
-    /**
-     * The last STDERR_TAIL_BYTES of the stderr file, read by seeking from its size: memory stays bounded however
-     * large the file grew. Returns [tail, whether anything before it exists].
-     *
-     * @return array{0: string, 1: bool}
-     */
-    private function readTail(): array
+    /** The stderr file's current size, read through the host's own handle; null when it cannot be read. */
+    private function stderrSize(): ?int
     {
-        if (! is_resource($this->stderr)) {
-            return ['', false];
+        if (! is_resource($this->stderrRead)) {
+            return null;
         }
 
-        $size = (int) (fstat($this->stderr)['size'] ?? 0);
-        $from = max(0, $size - self::STDERR_TAIL_BYTES);
+        $stat = fstat($this->stderrRead);
 
-        if (fseek($this->stderr, $from) !== 0) {
-            return ['', $size > 0];
-        }
-
-        $tail = stream_get_contents($this->stderr, self::STDERR_TAIL_BYTES);
-
-        return [is_string($tail) ? $tail : '', $from > 0];
+        return is_array($stat) ? (int) $stat['size'] : null;
     }
 
-    /** Keep the stderr file bounded across a long session: past STDERR_COMPACT_BYTES, keep only its tail. */
+    /**
+     * Bytes `[max(0, size − STDERR_TAIL_BYTES), size)` of the current epoch, read through the host's own handle (its
+     * offset is never moved by the child's appends). Exactly up to `$size`, so the bytes read are the ones counted.
+     * Null when the read fails.
+     */
+    private function readLast(int $size): ?string
+    {
+        if (! is_resource($this->stderrRead)) {
+            return null;
+        }
+
+        $from = max(0, $size - self::STDERR_TAIL_BYTES);
+
+        if (fseek($this->stderrRead, $from) !== 0) {
+            return null;
+        }
+
+        $this->probe('after-seek');
+        $length = $size - $from;
+        $bytes = $length > 0 ? stream_get_contents($this->stderrRead, $length) : '';
+
+        return is_string($bytes) ? $bytes : null;
+    }
+
+    /**
+     * Past STDERR_COMPACT_BYTES, start a new epoch: keep the epoch's last STDERR_TAIL_BYTES in host memory, then truncate
+     * the file to 0. Nothing is written back, so the child's next append begins the new epoch in true order. Whatever
+     * the child (or a descendant sharing its stderr) writes between the size read and the truncate is destroyed unseen,
+     * and that window cannot be observed, so every compaction sets the loss-possible flag. A failed read or truncate
+     * changes nothing.
+     */
     private function compact(): void
     {
         if ($this->result !== null || ! is_resource($this->stderr)) {
@@ -445,21 +521,74 @@ class ProcessSession implements Session
         }
 
         try {
-            $size = (int) (fstat($this->stderr)['size'] ?? 0);
+            $size = $this->stderrSize();
 
-            if ($size <= self::STDERR_COMPACT_BYTES) {
+            if ($size === null || $size <= self::STDERR_COMPACT_BYTES) {
                 return;
             }
 
-            [$tail] = $this->readTail();
+            $this->probe('after-stat');
+            $tail = $this->readLast($size);
 
-            if (ftruncate($this->stderr, 0)) {
-                fwrite($this->stderr, $tail); // O_APPEND: lands at the new end, as the child's next write will
-                fflush($this->stderr);
-                $this->stderrDropped = true;
+            if ($tail === null || ! ftruncate($this->stderr, 0)) {
+                return;
             }
+
+            $this->stderrHeld = $tail;
+            $this->stderrObserved += $size;
+            $this->stderrEpochs++;
+            $this->stderrLossPossible = true;
+            $this->probe('after-truncate');
         } catch (Throwable) {
-            // A failed compaction loses nothing the session needs; close() still reads a bounded tail.
+            // Nothing was truncated, or the epoch was already accounted: close() still returns a bounded result.
+        }
+    }
+
+    /**
+     * What close() returns: [stderr, observedAtLeast, omittedAtLeast].
+     *
+     * The child's bytes are the last ones of `held ⧺ final epoch`, in write order, cut so that the whole string,
+     * marker and gap lines included, is at most STDERR_TAIL_BYTES. A gap line separates held bytes from final-epoch
+     * bytes, because a compaction's window may have lost bytes between them. Omitted = observed − returned child bytes,
+     * so the final trim counts and no held copy is counted twice (it is never written back to the file).
+     *
+     * @return array{0: string, 1: int, 2: int}
+     */
+    private function finalStderr(): array
+    {
+        $size = $this->stderrSize() ?? 0;
+        $final = $size > 0 ? ($this->readLast($size) ?? '') : '';
+        $observed = $this->stderrObserved + $size;
+        $held = $this->stderrEpochs > 0 ? $this->stderrHeld : '';
+
+        if (! $this->stderrLossPossible && $held === '' && $size <= self::STDERR_TAIL_BYTES && strlen($final) === $size) {
+            return [$final, $observed, 0]; // everything observed, nothing omitted, no marker
+        }
+
+        $budget = self::STDERR_TAIL_BYTES - self::STDERR_MARKER_RESERVE;
+        $keptFinal = strlen($final) > $budget ? substr($final, -$budget) : $final;
+        $room = $budget - strlen($keptFinal);
+        $keptHeld = $room <= 0 ? '' : (strlen($held) > $room ? substr($held, -$room) : $held);
+        $retained = strlen($keptHeld) + strlen($keptFinal);
+        $omitted = max(0, $observed - $retained);
+
+        $marker = sprintf(
+            "[popcorn: stderr truncated: at least %d of at least %d observed bytes omitted; %d bytes retained in write order%s]\n",
+            $omitted,
+            $observed,
+            $retained,
+            $this->stderrLossPossible ? '; bytes written during a compaction may have been lost unobserved' : '',
+        );
+        $gap = $keptHeld !== '' && $keptFinal !== '' ? self::STDERR_GAP : '';
+
+        return [$marker.$keptHeld.$gap.$keptFinal, $observed, $omitted];
+    }
+
+    /** The @internal interleaving seam: tests only. */
+    private function probe(string $point): void
+    {
+        if ($this->stderrProbe !== null && is_resource($this->stderr)) {
+            ($this->stderrProbe)($point, $this->stderr);
         }
     }
 

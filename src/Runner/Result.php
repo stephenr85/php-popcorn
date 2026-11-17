@@ -33,6 +33,13 @@ class Result
     /**
      * @param  ?GrantAxis  $deniedAxis  set only on {@see Outcome::GrantDenied} — the axis of the security event
      * @param  ?string  $deniedTarget  set only on {@see Outcome::GrantDenied} — what was touched ("/etc", "host:443")
+     * @param  ?int  $stderrBytesObservedAtLeast  set only by a {@see ProcessSession}: a LOWER bound on the bytes of
+     *                                            stderr the child wrote (bytes written during a compaction may be lost
+     *                                            unobserved), never an exact total
+     * @param  ?int  $stderrBytesOmittedAtLeast  set only by a {@see ProcessSession}: a LOWER bound on the observed
+     *                                           bytes not returned in `stderr` (compactions and the final trim)
+     * @param  bool  $stderrLossPossible  a {@see ProcessSession} compacted its stderr at least once, so bytes may have
+     *                                    been lost unobserved
      */
     public function __construct(
         public Outcome $outcome,
@@ -49,6 +56,9 @@ class Result
         public bool $sandboxed = true,
         public ?GrantAxis $deniedAxis = null,
         public ?string $deniedTarget = null,
+        public ?int $stderrBytesObservedAtLeast = null,
+        public ?int $stderrBytesOmittedAtLeast = null,
+        public bool $stderrLossPossible = false,
     ) {}
 
     /**
@@ -166,15 +176,28 @@ class Result
         return new self(Outcome::SubstrateUnavailable, error: $error);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * The session-only stderr counts appear only when set, so a one-shot `run()` Result serialises exactly as it did.
+     *
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
+        $stderrCounts = $this->stderrBytesObservedAtLeast === null && $this->stderrBytesOmittedAtLeast === null && ! $this->stderrLossPossible
+            ? []
+            : [
+                'stderrBytesObservedAtLeast' => $this->stderrBytesObservedAtLeast,
+                'stderrBytesOmittedAtLeast' => $this->stderrBytesOmittedAtLeast,
+                'stderrLossPossible' => $this->stderrLossPossible,
+            ];
+
         return [
             'outcome' => $this->outcome->value,
             'error' => $this->error,
             'output' => $this->output(),
             'stderr' => $this->stderr,
             'stderrTruncated' => $this->stderrTruncated,
+            ...$stderrCounts,
             'telemetry' => [
                 'wallMs' => $this->wallMs,
                 'cpuMs' => $this->cpuMs,
