@@ -45,3 +45,18 @@ the end of the session rather than the end of a run.
   (exit, signal, stderr tail, `sandboxed`, `wallMs`) and an empty `output()`.
 - A per-frame read timeout is not part of the contract yet. `receive()` blocks like the transport it
   replaces; a timeout would be a later, additive change.
+
+## Amendment 2026-11-17 (independent Codex review ff28ff40, REVISE)
+
+Two consequences above were incomplete in the first implementation, and are now part of the decision:
+
+- **Acquisition is total.** `ProcessSession::start()` validates every launch string, since a NUL byte makes
+  `proc_open` throw. It creates its stderr file itself, by exclusive create rather than through `tempnam()`'s fallback
+  directory. Any throwable, or a process started without both pipes, releases everything acquired: the child is
+  killed and reaped, pipes and handles are closed, the file is unlinked. The result is a `RefusedSession`.
+- **Diagnostics are bounded in memory.** `close()` reads only the stderr tail, by seeking from the file's size. Long
+  sessions compact the file on host calls. **Residual boundary:** between two host calls the file on disk is not
+  bounded, and bytes written during a compaction may be lost. When that happens, `stderrTruncated` is true.
+
+A substrate must also never pass a granted credential through a launched process's argv. The bubble session delivers
+the Grant's env as the launched process's exact environment.
