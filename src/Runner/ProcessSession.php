@@ -509,8 +509,17 @@ class ProcessSession implements Session
         }
 
         $this->probe('after-seek');
+
+        // The probe is a callback and may have re-entered close(), which closes and clears this handle: re-read it and
+        // guard it again. A handle gone here is a failed read (null), exactly like a failed seek.
+        $read = $this->stderrRead;
+
+        if (! is_resource($read)) {
+            return null;
+        }
+
         $length = $size - $from;
-        $bytes = $length > 0 ? stream_get_contents($this->stderrRead, $length) : '';
+        $bytes = $length > 0 ? stream_get_contents($read, $length) : '';
 
         return is_string($bytes) ? $bytes : null;
     }
@@ -538,7 +547,11 @@ class ProcessSession implements Session
             $this->probe('after-stat');
             $tail = $this->readLast($size);
 
-            if ($tail === null || ! ftruncate($this->stderr, 0)) {
+            // Callbacks ran since the guard above (the probe, and readLast's): re-read the write handle and guard it
+            // again. A handle closed or cleared meanwhile means no truncate, so nothing is lost or counted.
+            $write = $this->stderr;
+
+            if ($tail === null || ! is_resource($write) || ! ftruncate($write, 0)) {
                 return;
             }
 
