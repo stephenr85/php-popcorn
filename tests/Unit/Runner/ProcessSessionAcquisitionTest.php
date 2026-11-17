@@ -185,6 +185,60 @@ it('releases a PARTIAL acquisition: a started child without both pipes is killed
         ->and(leftIn($dir))->toBe([]);
 });
 
+// --- PRR03 P4 (root cb7f7936): the host's stderr READ handle is acquired after the spawn ------------------------------
+
+/** The number of open descriptors in this process, so a test can prove every handle it caused was released. */
+function openDescriptorCount(): int
+{
+    return count(scandir('/dev/fd') ?: []);
+}
+
+it('releases a PARTIAL acquisition when the stderr read handle cannot be opened after the spawn: child reaped, nothing left', function () {
+    $dir = trackedDir();
+    $pid = null;
+    $before = openDescriptorCount();
+
+    // The existing spawn seam really spawns the child, then unlinks the stderr file the descriptor points at, so the
+    // read-handle fopen($path, 'r') that follows fails with ENOENT deterministically (even as root). No new seam.
+    $session = ProcessSession::start(childArgv('ignore'), [], false, Grant::none(), null, $dir,
+        static function (array $argv, array $descriptors, ?string $cwd, array $env) use (&$pid): array {
+            $process = proc_open($argv, $descriptors, $pipes, $cwd, $env);
+            $pid = proc_get_status($process)['pid'];
+            unlink(stream_get_meta_data($descriptors[2])['uri']);
+
+            return [$process, $pipes];
+        });
+
+    expect($session)->toBeInstanceOf(RefusedSession::class)
+        ->and($session->refusal()?->outcome)->toBe(Outcome::SubstrateUnavailable)
+        ->and($session->refusal()?->error)->toContain('could not open the stderr file for reading')
+        ->and($pid)->toBeInt()
+        ->and(pidIsAlive($pid))->toBeFalse()
+        ->and(leftIn($dir))->toBe([])
+        ->and(openDescriptorCount())->toBe($before);
+});
+
+it('releases BOTH stderr handles on every other acquisition failure', function (Closure $spawn) {
+    $dir = trackedDir();
+    $before = openDescriptorCount();
+
+    $session = ProcessSession::start(childArgv('ignore'), [], false, Grant::none(), null, $dir, $spawn);
+
+    expect($session)->toBeInstanceOf(RefusedSession::class)
+        ->and(leftIn($dir))->toBe([])
+        ->and(openDescriptorCount())->toBe($before);
+})->with([
+    'a throwing spawn' => [static fn () => throw new RuntimeException('injected')],
+    'a spawn with no process' => [static fn () => [false, []]],
+    'a started child without both pipes' => [static function (array $argv, array $descriptors, ?string $cwd, array $env): array {
+        $process = proc_open($argv, $descriptors, $pipes, $cwd, $env);
+        fclose($pipes[1]);
+        unset($pipes[1]);
+
+        return [$process, $pipes];
+    }],
+]);
+
 it('leaves nothing behind after a normal session closes', function () {
     $dir = trackedDir();
 

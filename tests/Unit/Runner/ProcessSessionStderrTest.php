@@ -13,7 +13,9 @@ use Rushing\Popcorn\Runner\Result;
  * plus "\nEND-MARKER\n" to stderr, flushes, and only then answers `flooded` on stdout. So once the host has received
  * `flooded`, the child is idle (blocked on stdin) and writes nothing more. The `@internal` probe seam writes bytes
  * through the child's own O_APPEND handle at an exact point of a compaction (`after-stat`, `after-seek`,
- * `after-truncate`). There are no sleeps, no tuning and no repeat loops; exact byte counts are test knowledge.
+ * `after-truncate`). The injected races are deterministic: no tuned delays and no repeat loops. The one wait is the
+ * non-claim pin's bounded synchronisation (a file-size condition with a deadline, the same pattern as the existing
+ * 6 MiB test), not a race. Exact byte counts are test knowledge; the product still names them lower bounds.
  */
 const P4_FLOOD = 1200000;                 // > STDERR_COMPACT_BYTES (1 MiB): one host call after it compacts
 const P4_TAIL_END = "\nEND-MARKER\n";      // what the fixture appends after the flood
@@ -69,6 +71,14 @@ function p4ChildBytes(string $stderr): string
     return str_starts_with($stderr, '[popcorn: stderr truncated:') ? substr($stderr, strpos($stderr, "\n") + 1) : $stderr;
 }
 
+/** The marker's three numbers: [omitted N, observed M, retained R]. */
+function p4MarkerNumbers(string $stderr): array
+{
+    expect(preg_match('/^\[popcorn: stderr truncated: at least (\d+) of at least (\d+) observed bytes omitted; (\d+) bytes retained in write order/', $stderr, $m))->toBe(1);
+
+    return [(int) $m[1], (int) $m[2], (int) $m[3]];
+}
+
 function p4Flood(Rushing\Popcorn\Runner\Session $session, int $bytes = P4_FLOOD): void
 {
     expect($session->send("flood {$bytes}"))->toBeTrue()
@@ -101,6 +111,15 @@ it('loses bytes written in the stat-to-truncate window, and says so: possible lo
         ->and($result->stderrBytesObservedAtLeast)->toBe(P4_FLOOD_TOTAL)
         ->and(strlen($result->stderr))->toBeLessThanOrEqual(P4_TAIL)
         ->and(p4Left($dir))->toBe([]);
+
+    // The marker's numbers are the Result's numbers, and R is the child bytes actually returned (no gap line here).
+    $retained = strlen(p4ChildBytes($result->stderr));
+    expect($result->stderrBytesOmittedAtLeast)->toBe(P4_FLOOD_TOTAL - $retained)
+        ->and(p4MarkerNumbers($result->stderr))->toBe([$result->stderrBytesOmittedAtLeast, $result->stderrBytesObservedAtLeast, $retained]);
+
+    // Close is cached: the same Result, with the same counts, after a compaction.
+    expect($session->close())->toBe($result)
+        ->and($session->close()->stderrBytesOmittedAtLeast)->toBe(P4_FLOOD_TOTAL - $retained);
 });
 
 it('never reorders: bytes appended right after the truncate follow the held tail, after a gap line', function () {
@@ -121,6 +140,11 @@ it('never reorders: bytes appended right after the truncate follow the held tail
         ->and($result->stderrBytesObservedAtLeast)->toBe(P4_FLOOD_TOTAL + strlen("AFTER-TRUNCATE\n"))
         ->and($result->stderrLossPossible)->toBeTrue()
         ->and(strlen($result->stderr))->toBeLessThanOrEqual(P4_TAIL);
+
+    // Retained child bytes exclude the gap line; the marker's numbers agree with the Result's.
+    $retained = strlen($child) - strlen("[popcorn: possible gap]\n");
+    expect($result->stderrBytesOmittedAtLeast)->toBe($result->stderrBytesObservedAtLeast - $retained)
+        ->and(p4MarkerNumbers($result->stderr))->toBe([$result->stderrBytesOmittedAtLeast, $result->stderrBytesObservedAtLeast, $retained]);
 });
 
 it('reads through its own handle: an append between the seek and the read cannot move what the host reads', function () {
@@ -137,7 +161,9 @@ it('reads through its own handle: an append between the seek and the read cannot
         ->and(strlen($child))->toBeGreaterThan(P4_TAIL - 512 - 1)
         ->and(rtrim(substr($child, 0, -strlen(P4_TAIL_END)), 'x'))->toBe('')
         ->and($result->stderr)->not->toContain('MOVED-OFFSET')
-        ->and($result->stderrLossPossible)->toBeTrue();
+        ->and($result->stderrLossPossible)->toBeTrue()
+        ->and($result->stderrBytesObservedAtLeast)->toBe(P4_FLOOD_TOTAL)
+        ->and($result->stderrBytesOmittedAtLeast)->toBe(P4_FLOOD_TOTAL - strlen($child));
 });
 
 it('counts each epoch once: two compactions, then close, observe the sum, and nothing held is recounted', function () {
@@ -210,6 +236,41 @@ it('caps per host call, not continuously: the file grows past the threshold betw
     expect(filesize($file))->toBe(0);
 
     $session->close();
+});
+
+it('never reports an unreadable stderr at close as empty and complete: explicit line, truncated, lower-bound counts', function () {
+    $dir = p4Dir();
+    $seeks = 0;
+    // The first after-seek is the compaction's read; the second is close()'s read, which fails here.
+    $session = p4Session($dir, static function (string $point) use (&$seeks): void {
+        if ($point === 'after-seek' && ++$seeks === 2) {
+            throw new RuntimeException('injected read failure at close');
+        }
+    });
+
+    p4Flood($session);
+    p4Flood($session, 10); // a small final epoch (no compaction), so close() has bytes to read and reaches its seek
+    $result = $session->close();
+
+    expect($result->stderr)->toStartWith('[popcorn: stderr could not be read at close; ')
+        ->and($result->stderrTruncated)->toBeTrue()
+        ->and($result->stderrLossPossible)->toBeTrue()
+        ->and($result->stderrBytesObservedAtLeast)->toBe(P4_FLOOD_TOTAL)
+        ->and($result->stderrBytesOmittedAtLeast)->toBe(P4_FLOOD_TOTAL)
+        ->and($result->outcome)->toBe(Outcome::NonZeroExit)
+        ->and($result->error)->toContain('closing the session failed')
+        ->and($session->close())->toBe($result)
+        ->and(p4Left($dir))->toBe([]);
+});
+
+it('releases a session that compacted but was never closed: the destructor leaves nothing behind', function () {
+    $dir = p4Dir();
+    $session = p4Session($dir);
+    p4Flood($session);
+
+    unset($session); // the only reference: __destruct closes it
+
+    expect(p4Left($dir))->toBe([]);
 });
 
 it('leaves a one-shot Result serialised exactly as before, and adds the counts only to a session Result', function () {

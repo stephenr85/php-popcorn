@@ -103,7 +103,12 @@ the file, and its residual is restated below.
 - **The marker.** When anything was omitted, or loss is possible, `stderr` begins with one ASCII line,
   `[popcorn: stderr truncated: at least N of at least M observed bytes omitted; R bytes retained in write order…]`,
   extended with the possible-loss clause when it applies. A `[popcorn: possible gap]` line separates held bytes from
-  the final epoch's. The whole string, marker included, is at most `STDERR_TAIL_BYTES`. The child's bytes appear in
-  the order written, but are not promised contiguous once anything was omitted.
+  the final epoch's, but only when both are returned; a possible loss after the held tail is otherwise carried by the
+  marker's possible-loss clause. The whole string, marker included, is at most `STDERR_TAIL_BYTES`. The child's bytes
+  appear in the order written, but are not promised contiguous once anything was omitted.
+- **Unreadable is never empty.** If the stderr size or bytes cannot be read at close, the Result does not report
+  empty-and-complete. Its `stderr` is one explicit `[popcorn: stderr could not be read at close; …]` line,
+  `stderrTruncated` is true, everything observed so far counts as omitted (still lower bounds), and `error` says
+  closing failed.
 - **Residual boundary: a per-call cap, NOT a continuous disk bound.** Between two host calls a child can grow the file
-  on disk without limit, and after a compaction it appends again. Memory stays at most two tails.
+  on disk without limit, and after a compaction it appends again. Memory stays a small constant multiple of the tail.

@@ -39,7 +39,7 @@ use Throwable;
  *     The child's bytes appear in the order written, but are not promised contiguous once anything was omitted;
  *   - `stderrBytesObservedAtLeast` and `stderrBytesOmittedAtLeast` are LOWER bounds, never exact totals.
  *   RESIDUAL BOUNDARY: this is a cap per host call, NOT a continuous disk bound. Between two host calls a child can
- *   grow the file on disk without limit, and after a compaction it appends again. Memory stays at most two tails.
+ *   grow the file on disk without limit, and after a compaction it appends again. Memory stays a small constant multiple of the tail.
  * - `close()` is idempotent and exception-safe: the file is unlinked and the Result cached in a `finally`,
  *   and it also runs from the destructor, so an abandoned session never leaks a process or a file.
  *
@@ -181,16 +181,6 @@ class ProcessSession implements Session
                 throw new \RuntimeException('could not reopen the stderr file for append');
             }
 
-            // The host's own read handle, opened BEFORE the spawn: a separate open file description, so the child's
-            // O_APPEND writes never move the offset the host reads from. A failure here is a pre-spawn refusal.
-            $stderrRead = @fopen($path, 'r');
-
-            if ($stderrRead === false) {
-                $stderrRead = null;
-
-                throw new \RuntimeException('could not open the stderr file for reading');
-            }
-
             $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => $stderr];
             [$process, $pipes] = ($spawn ?? self::spawn(...))($argv, $descriptors, $cwd, $env);
 
@@ -205,6 +195,17 @@ class ProcessSession implements Session
                 self::abandon($process, $pipes, $stderr, $path, $stderrRead);
 
                 return new RefusedSession(Result::substrateUnavailable("popcorn: `{$argv[0]}` started without both stdio pipes; it was stopped."), $grant);
+            }
+
+            // The host's own read handle (PLAN-P4: opened after the spawn): a separate open file description, so the
+            // child's O_APPEND writes never move the offset the host reads from. Failing here is a partial acquisition:
+            // the catch below stops and reaps the child and releases everything.
+            $stderrRead = @fopen($path, 'r');
+
+            if ($stderrRead === false) {
+                $stderrRead = null;
+
+                throw new \RuntimeException('could not open the stderr file for reading');
             }
 
             $status = proc_get_status($process);
@@ -398,6 +399,7 @@ class ProcessSession implements Session
         $stderr = '';
         $observed = $this->stderrObserved;
         $omitted = 0;
+        $stderrUnread = false;
         $readError = null;
 
         try {
@@ -434,9 +436,15 @@ class ProcessSession implements Session
             [$stderr, $observed, $omitted] = $this->finalStderr();
         } catch (Throwable $e) {
             $readError = 'popcorn: closing the session failed ('.$e::class.': '.$e->getMessage().')';
-            // Nothing of what was observed is returned, so all of it counts as omitted (still a lower bound).
-            $stderr = '';
+            // The final stderr is UNKNOWN, never empty-and-complete: say so explicitly, mark it truncated, and count
+            // everything observed so far as omitted (both still lower bounds; the final epoch is not counted).
+            $stderrUnread = true;
             $omitted = $observed;
+            $stderr = sprintf(
+                "[popcorn: stderr could not be read at close; at least %d of at least %d observed bytes omitted; 0 bytes retained]\n",
+                $omitted,
+                $observed,
+            );
         } finally {
             self::abandon($this->process, $this->pipes, $this->stderr, $this->stderrFile, $this->stderrRead);
             $this->process = null;
@@ -451,7 +459,7 @@ class ProcessSession implements Session
             $this->result = new Result(
                 $clean ? Outcome::Success : Outcome::NonZeroExit,
                 stderr: $stderr,
-                stderrTruncated: $omitted > 0 || $this->stderrLossPossible,
+                stderrTruncated: $omitted > 0 || $this->stderrLossPossible || $stderrUnread,
                 error: $clean ? null : ($readError ?? $this->failureMessage($stderr)),
                 wallMs: $wallMs,
                 exitCode: $this->exitCode,
@@ -556,8 +564,9 @@ class ProcessSession implements Session
      */
     private function finalStderr(): array
     {
-        $size = $this->stderrSize() ?? 0;
-        $final = $size > 0 ? ($this->readLast($size) ?? '') : '';
+        // An unknown size is never zero: it goes to close()'s explicit could-not-be-read result instead.
+        $size = $this->stderrSize() ?? throw new \RuntimeException('the stderr size could not be read');
+        $final = $size > 0 ? ($this->readLast($size) ?? throw new \RuntimeException('the stderr bytes could not be read')) : '';
         $observed = $this->stderrObserved + $size;
         $held = $this->stderrEpochs > 0 ? $this->stderrHeld : '';
 
