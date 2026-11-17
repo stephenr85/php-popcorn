@@ -6,6 +6,7 @@ use Rushing\Popcorn\Runner\Outcome;
 use Rushing\Popcorn\Runner\ProcessSession;
 use Rushing\Popcorn\Runner\RefusedSession;
 use Rushing\Popcorn\Runner\Result;
+use Rushing\Popcorn\Runner\RuntimeEnvAdditions;
 
 /**
  * The live session over a real child process (popcorn-runner-rehome ticket 03, php-popcorn ADR-0003).
@@ -66,8 +67,10 @@ it('hands the child exactly the given environment and nothing inherited from the
         putenv('POPCORN_SESSION_HOST_ONLY');
     }
 
+    // Exactly the given environment: equality, after only the closed, observed runtime additions for a PHP child on
+    // this platform (RuntimeEnvAdditions; root 44be5842). Any other extra name, inherited or not, fails.
     expect($seen)->toBeArray()
-        ->and($seen['DECLARED'] ?? null)->toBe('yes')
+        ->and(RuntimeEnvAdditions::withoutObserved($seen, ['DECLARED' => 'yes'], 'php'))->toBe(['DECLARED' => 'yes'])
         ->and($seen)->not->toHaveKey('POPCORN_SESSION_HOST_ONLY')
         ->and($seen)->not->toHaveKey('HOME');
 });

@@ -60,3 +60,23 @@ Two consequences above were incomplete in the first implementation, and are now 
 
 A substrate must also never pass a granted credential through a launched process's argv. The bubble session delivers
 the Grant's env as the launched process's exact environment.
+
+## Amendment 2026-11-17 (root ruling 44be5842, popcorn-runner-rehome 03 unit 2)
+
+**Delivery is exact.** A session starts its child with exactly the Grant's environment, and nothing else. That is the
+invariant, and no check may relax it.
+
+**One observed runtime addition is allowed in checks, and the list is closed.** A check usually reads what the child's
+own code sees: `getenv()` in a PHP child. On macOS a PHP child has been OBSERVED to see `__CF_USER_TEXT_ENCODING` there,
+although the variable was not handed to it. A names-only primitive control on the tots Mac (QA 6667105e, report
+8ba1c183) found it in both parent conditions. The control did not see it in the environment that child was started
+with. That reading rests on an assumption about what `ps -E` shows, and the control is invalid as a whole by its own
+rule, because the Apple-binary children's start environment could not be read.
+
+This records an observed post-exec runtime behaviour, nothing more. It does not establish that the platform injects
+the name at spawn. It does not attribute the name to any library; that trace is a follow-up nomination.
+
+`Rushing\Popcorn\Runner\RuntimeEnvAdditions::OBSERVED` holds the list: PHP, Darwin, `__CF_USER_TEXT_ENCODING`. A check
+removes only that name, only for a PHP child on Darwin, and only when the Grant did not carry it. The check then
+requires exact equality with the Grant, so any other extra name, on any platform, still fails. There is no pattern,
+no allow-any and no skip. A new entry needs a new ruling, and the test that pins the list changes with it.
