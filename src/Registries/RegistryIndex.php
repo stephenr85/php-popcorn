@@ -232,8 +232,12 @@ class RegistryIndex implements Forgettable, Gated, Nested, RecordsRegistrants, R
             by: $by,
         );
 
+        // A describe without an owner CLEARS the root's owner: one left behind belongs to the registry this
+        // describe just superseded, and owner() would answer with it instead of falling back to the store.
         if ($owner !== null) {
             $this->owners[(string) $root] = $owner;
+        } else {
+            unset($this->owners[(string) $root]);
         }
 
         // Both edges of the push, deliberately — see Gated. Stamping only on installation would leave a

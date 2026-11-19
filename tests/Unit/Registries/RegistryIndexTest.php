@@ -118,6 +118,21 @@ it('returns the OWNER where one was named, and the store where none was', functi
         ->and($index->routeTo('beam.particle.resources.invoices'))->toBe($store);
 });
 
+it('drops the displaced registry\'s owner when the root is described again without one', function () {
+    $index = new RegistryIndex;
+    $first = store('beam.particle.resources');
+    $owner = new stdClass;
+    $second = store('beam.particle.resources');
+
+    $index->describe($first, $owner);
+    $index->describe($second);
+
+    // The owner belonged to the registry that was superseded; answering with it would hand a caller
+    // reaching for the registry BY NAME an object that no longer fronts what the root resolves to.
+    expect($index->owner('beam.particle.resources'))->toBe($second)
+        ->and($index->routeTo('beam.particle.resources.invoices'))->toBe($second);
+});
+
 it('reads a described registry\'s declaration off the LIVE registry, not off its owner\'s class', function () {
     $index = new RegistryIndex;
     // The owner is a bare stdClass — it carries no `#[IsRegistry]` and could not. The declaration exists
