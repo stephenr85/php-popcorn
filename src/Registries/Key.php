@@ -71,9 +71,11 @@ class Key implements Rootable
      *
      * ⚠️ **Do not port this pattern verbatim to JavaScript. The JS equivalent is `$`, not `\z`.**
      * JS has no `\z`; unflagged it is an identity escape for a literal `z`, so a copied pattern
-     * rejects every legal key and accepts `beamz` — an inverted matcher with no syntax error to
-     * catch it. JS `$` without the `m` flag means what PHP's `\z` means (PHP's `$` is the loose one,
-     * which is why this is `\z` here and `$` there). The grammar itself ports fine; the *text* of the
+     * loses its end anchor and demands a `z` in every segment instead. It rejects 12 of the 13 legal
+     * `grammar` cases in the corpus (`sub:tirzepatide` passes only because a `z` follows its first
+     * group) and accepts `beamz` and `buzz!` — an inverted matcher with no syntax error to catch it.
+     * JS `$` without the `m` flag means what PHP's `\z` means (PHP's `$` is the loose one, which is
+     * why this is `\z` here and `$` there). The grammar itself ports fine; the *text* of the
      * pattern does not, and the conformance corpus at `tests/Fixtures/conformance/registry-key.json`
      * is what fails loudly the day someone copies it anyway (ticket 16).
      */
